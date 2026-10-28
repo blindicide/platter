@@ -27,6 +27,8 @@ HD Tune / CrystalDiskInfo / GParted / ddrescue in one tool, with a deliberate
 Win2000/XP-era Qt Widgets UI. Full spec: owner's "HDD Operations Suite v1.0"
 document (the spec's `hos-*` names are renamed to `platter-*` throughout).
 
+Repo: https://github.com/blindicide/platter (public, default branch `main`).
+
 Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 (tests). zstd and SQLite are planned for later milestones and not yet linked.
 
@@ -127,7 +129,7 @@ first real-hardware (read-only) run by the owner.**
 - README.md, docs/architecture.md, docs/safety.md, docs/cli-reference.md.
 
 ### Next up (in order)
-1. Push to GitHub, get CI green on both OSes.
+1. Get CI green on both OSes (first runs started 2026-10-28; see the Actions tab).
 2. Owner's first real-hardware read-only run (devices list / info / smart /
    partitions) on Windows and in WSL or a Linux VM, with the important drive
    unplugged. Capture real smartctl JSON as fixtures (strip serials).

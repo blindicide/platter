@@ -101,7 +101,7 @@ std::string scan_to_json(const ScanSnapshot& s, const Privacy& p) {
     j["note"] = "Latency classes describe observed I/O response time, not physical sector health.";
     j["blocks_format"] = "[index, duration_us, time_ms, errc, retries, class]";
     j["blocks"] = std::move(blocks);
-    return j.dump(1);
+    return j.dump();  // compact: ~30 bytes per tested block
 }
 
 Result<ScanSnapshot> scan_from_json(const std::string& text) {
@@ -253,7 +253,8 @@ std::string scan_to_text(const ScanSnapshot& s, const Privacy& p) {
     o << "platter surface scan report\n===========================\n\nDevice\n";
     row("Path", s.device.path);
     row("Model", s.device.model.empty() ? "-" : s.device.model);
-    row("Serial", p.include_serials ? s.device.serial : mask_serial(s.device.serial));
+    const auto serial = p.include_serials ? s.device.serial : mask_serial(s.device.serial);
+    row("Serial", serial.empty() ? "-" : serial);
     row("Firmware", s.device.firmware.empty() ? "-" : s.device.firmware);
     row("Capacity", format_capacity(s.device.capacity_bytes));
     row("Sector size", std::to_string(s.layout.sector_size) + " bytes");

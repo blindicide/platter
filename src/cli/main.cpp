@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: TBD
 //
 // platter-cli: command-line front end over the same core as the GUI.
-// Every command in v0.1 is read-only. See docs/cli-reference.md.
+// Every command is read-only. See docs/cli-reference.md.
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdio>
+#include <map>
+#include <set>
+#include <thread>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -11,11 +17,17 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #include "platter/core/block_device.hpp"
 #include "platter/partitions/partition_table.hpp"
 #include "platter/platform/enumerate.hpp"
 #include "platter/reports/json.hpp"
+#include "platter/reports/scan_report.hpp"
 #include "platter/smart/smart.hpp"
+#include "platter/surface/surface_scan.hpp"
 #include "platter/version.hpp"
 #include "table.hpp"
 
@@ -38,9 +50,11 @@ enum Exit : int {
     kIoError = 6,
     kUnsupported = 7,
     kToolMissing = 8,
+    kScanErrors = 9,
     kHealthWarning = 10,
     kHealthCritical = 11,
     kHealthUnknown = 12,
+    kCancelled = 13,
 };
 
 int exit_for(const Error& e) {
@@ -71,6 +85,8 @@ struct Options {
     std::string output;
     std::uint32_t sector_size = 512;
     std::string smart_type;  // -d for smartctl
+    std::map<std::string, std::string> values;  // command-specific --key VALUE options
+    std::set<std::string> flags;                // command-specific --flag options
     std::vector<std::string> positional;
 };
 
@@ -81,6 +97,7 @@ Commands (all read-only):
   devices info <device>         Show identification and capabilities
   smart show <device>           SMART / NVMe health via smartctl
   partitions list <device>      Show the MBR/GPT partition table
+  surface scan <device>         Read-only surface scan (latency map)
   version                       Print version
 
 <device> is a device path (/dev/sda, \\.\PhysicalDrive1), a short name
@@ -97,9 +114,26 @@ Options:
   -h, --help            This help
   --version             Print version
 
+Surface scan options:
+  --start LBA           First LBA (default 0)
+  --end LBA             Last LBA, inclusive (default: end of device)
+  --block-size SIZE     Bytes per request, e.g. 64K, 1M (default 1M)
+  --order O             forward | reverse | random | sampled (default forward)
+  --sample PERCENT      Share of blocks to test with --order sampled (default 10)
+  --seed N              Seed for random / sampled order
+  --retries N           Extra attempts for a failed block (default 0)
+  --stop-after N        Stop after N unreadable blocks (default: never)
+  --thresholds A,B,C,D  Latency class bounds in ms (default 5,20,50,200)
+  --buffered            Use the OS cache instead of direct I/O
+  --csv FILE            Also write per-block CSV
+  --report FILE         Also write a human-readable text report
+  --map                 Print an ASCII latency map at the end
+  (with --json / -o, the canonical JSON scan file is written)
+
 Exit codes: 0 ok, 1 failure, 2 usage, 3 not found, 4 permission denied,
 5 busy, 6 I/O error, 7 unsupported, 8 smartctl missing/failed,
-10/11/12 health WARNING/CRITICAL/UNKNOWN (smart show).
+9 scan found unreadable blocks, 10/11/12 health WARNING/CRITICAL/UNKNOWN
+(smart show), 13 cancelled (Ctrl+C).
 )";
 
 std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
@@ -145,6 +179,14 @@ std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
                 return std::nullopt;
             }
             o.sector_size = static_cast<std::uint32_t>(std::stoul(*v));
+        } else if (a == "--start" || a == "--end" || a == "--block-size" || a == "--order" || a == "--sample" ||
+                   a == "--seed" || a == "--retries" || a == "--stop-after" || a == "--thresholds" ||
+                   a == "--csv" || a == "--report") {
+            auto v = need(a.c_str());
+            if (!v) { exit_code = kUsage; return std::nullopt; }
+            o.values[a.substr(2)] = *v;
+        } else if (a == "--buffered" || a == "--map") {
+            o.flags.insert(a.substr(2));
         } else if (a.size() > 1 && a[0] == '-') {
             std::cerr << "platter-cli: unknown option '" << a << "'\n";
             exit_code = kUsage;
@@ -164,9 +206,11 @@ public:
 
     std::ostream& text() { return buf_; }
     void set_json(json j) { json_ = std::move(j); }
+    // Pre-serialized JSON written verbatim (canonical files such as scan exports).
+    void set_raw_json(std::string s) { raw_json_ = std::move(s); }
 
     int flush(int code) {
-        std::string payload = opts_.json ? json_.dump(2) + "\n" : buf_.str();
+        std::string payload = opts_.json ? (raw_json_.empty() ? json_.dump(2) : raw_json_) + "\n" : buf_.str();
         if (opts_.quiet && !opts_.json && opts_.output.empty()) return code;
         if (!opts_.output.empty()) {
             std::ofstream f(opts_.output, std::ios::binary | std::ios::trunc);
@@ -185,6 +229,7 @@ private:
     const Options& opts_;
     std::ostringstream buf_;
     json json_;
+    std::string raw_json_;
 };
 
 int fail(const Error& e, const std::string& context = {}) {
@@ -450,6 +495,219 @@ int cmd_smart_show(const Options& o, const std::string& target) {
     }
 }
 
+// ------------------------------------------------------------- surface scan
+
+std::atomic<bool> g_interrupted{false};
+extern "C" void on_sigint(int) { g_interrupted.store(true); }
+
+std::optional<std::uint64_t> parse_u64(const std::string& s) {
+    if (s.empty() || s.find_first_not_of("0123456789") != std::string::npos || s.size() > 20) return std::nullopt;
+    try {
+        return std::stoull(s);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+// "4096", "64K", "1M", "16MiB" -> bytes
+std::optional<std::uint64_t> parse_size(std::string s) {
+    std::uint64_t mult = 1;
+    for (auto* suf : {"KiB", "MiB", "K", "M", "k", "m"}) {
+        const std::string sf = suf;
+        if (s.size() > sf.size() && s.compare(s.size() - sf.size(), sf.size(), sf) == 0) {
+            mult = (sf[0] == 'K' || sf[0] == 'k') ? 1024 : 1024 * 1024;
+            s.resize(s.size() - sf.size());
+            break;
+        }
+    }
+    auto v = parse_u64(s);
+    if (!v || *v > (UINT64_MAX / mult)) return std::nullopt;
+    return *v * mult;
+}
+
+std::string hms(std::chrono::seconds s) {
+    char b[32];
+    const auto t = s.count();
+    std::snprintf(b, sizeof b, "%02lld:%02lld:%02lld", static_cast<long long>(t / 3600),
+                  static_cast<long long>(t / 60 % 60), static_cast<long long>(t % 60));
+    return b;
+}
+
+void print_ascii_map(std::ostream& os, const surface::ScanSnapshot& snap) {
+    using surface::LatencyClass;
+    static const char glyph[] = {' ', '.', ':', '+', '*', '#', 'X'};
+    const std::size_t n = snap.blocks.size();
+    if (!n) return;
+    const std::size_t cols = 64, max_rows = 16;
+    const std::size_t cells = std::min<std::size_t>(n, cols * max_rows);
+    const std::size_t per = (n + cells - 1) / cells;
+    os << "\nLatency map (" << per << " block(s) per character; worst class shown)\n"
+       << "  ' ' untested  '.' fast  ':' good  '+' medium  '*' slow  '#' very slow  'X' error\n";
+    for (std::size_t c = 0; c * per < n; ++c) {
+        if (c % cols == 0) os << (c ? "|\n  |" : "  |");
+        int worst = 0;
+        for (std::size_t i = c * per; i < std::min(n, (c + 1) * per); ++i)
+            worst = std::max(worst, static_cast<int>(snap.blocks[i].cls));
+        os << glyph[worst];
+    }
+    os << "|\n";
+}
+
+int cmd_surface_scan(const Options& o, const std::string& target) {
+    using namespace surface;
+    ScanConfig c;
+    auto get = [&](const char* k) -> const std::string* {
+        auto it = o.values.find(k);
+        return it == o.values.end() ? nullptr : &it->second;
+    };
+    auto bad = [](const std::string& m) {
+        std::cerr << "platter-cli: " << m << "\n";
+        return kUsage;
+    };
+    if (auto v = get("start")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--start must be an LBA number");
+        c.start_lba = *n;
+    }
+    if (auto v = get("end")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--end must be an LBA number");
+        c.end_lba = *n;
+    }
+    if (auto v = get("block-size")) {
+        auto n = parse_size(*v);
+        if (!n || *n > UINT32_MAX) return bad("--block-size must be a size such as 64K or 1M");
+        c.block_bytes = static_cast<std::uint32_t>(*n);
+    }
+    if (auto v = get("order")) {
+        if (*v == "forward") c.order = ScanOrder::forward;
+        else if (*v == "reverse") c.order = ScanOrder::reverse;
+        else if (*v == "random") c.order = ScanOrder::random;
+        else if (*v == "sampled") c.order = ScanOrder::sampled;
+        else return bad("--order must be forward, reverse, random or sampled");
+    }
+    if (auto v = get("sample")) {
+        try {
+            c.sample_percent = std::stod(*v);
+        } catch (...) {
+            return bad("--sample must be a percentage");
+        }
+    }
+    if (auto v = get("seed")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--seed must be a number");
+        c.seed = *n;
+    }
+    if (auto v = get("retries")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--retries must be a number");
+        c.retries = static_cast<std::uint32_t>(std::min<std::uint64_t>(*n, 1000));
+    }
+    if (auto v = get("stop-after")) {
+        auto n = parse_u64(*v);
+        if (!n || *n == 0) return bad("--stop-after must be at least 1");
+        c.error_policy = ErrorPolicy::stop_after_n;
+        c.max_errors = *n;
+    }
+    if (auto v = get("thresholds")) {
+        std::istringstream in(*v);
+        std::string part;
+        std::size_t i = 0;
+        while (std::getline(in, part, ',')) {
+            if (i >= 4) return bad("--thresholds takes exactly four values");
+            try {
+                const double msv = std::stod(part);
+                if (msv <= 0 || msv > 3'600'000) return bad("--thresholds values must be positive milliseconds");
+                c.thresholds.us[i++] = static_cast<std::uint32_t>(msv * 1000.0);
+            } catch (...) {
+                return bad("--thresholds must look like 5,20,50,200");
+            }
+        }
+        if (i != 4) return bad("--thresholds takes exactly four values");
+    }
+    c.direct_io = !o.flags.count("buffered");
+
+    const bool image = is_image_path(target);
+    const std::string path = image ? target : expand_device(target);
+    auto created = create_scan(path, image, c, o.sector_size);
+    if (!created) return fail(created.error(), path);
+    auto& scan = *created;
+    if (auto v = scan->validate(); !v) return fail(v.error(), "invalid scan configuration");
+
+    const auto& L = scan->layout();
+    if (!o.quiet) {
+        std::cerr << "Scanning " << path << " (read-only): LBA " << L.start_lba << " - " << L.end_lba << ", "
+                  << L.block_count << " blocks of " << scan->config().block_bytes << " bytes, "
+                  << scan_order_name(scan->config().order) << ", "
+                  << (scan->config().direct_io ? "direct I/O" : "buffered I/O") << ". Ctrl+C to stop.\n";
+        for (const auto& w : scan->warnings()) std::cerr << "warning: " << w << "\n";
+    }
+
+    g_interrupted = false;
+    auto previous = std::signal(SIGINT, on_sigint);
+    if (auto s = scan->start(); !s) return fail(s.error(), "starting scan");
+
+    const bool tty =
+#ifdef _WIN32
+        true;
+#else
+        isatty(2) != 0;
+#endif
+    auto last_print = std::chrono::steady_clock::now() - std::chrono::hours(1);
+    bool cancel_sent = false;
+    while (!is_terminal(scan->state())) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (g_interrupted && !cancel_sent) {
+            scan->cancel();
+            cancel_sent = true;
+            if (!o.quiet) std::cerr << "\nStopping...\n";
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (o.quiet || now - last_print < (tty ? std::chrono::milliseconds(500) : std::chrono::seconds(10))) continue;
+        last_print = now;
+        const auto p = scan->progress();
+        const auto st = scan->stats();
+        char line[200];
+        std::snprintf(line, sizeof line, "[%5.1f%%] LBA %-12llu %8.2f MB/s  ETA %s  errors %llu  slow %llu",
+                      p.percent(), static_cast<unsigned long long>(p.current_lba), p.current_bytes_per_sec / 1e6,
+                      p.eta ? hms(*p.eta).c_str() : "--:--:--", static_cast<unsigned long long>(st.failed),
+                      static_cast<unsigned long long>(st.slow));
+        std::cerr << (tty ? "\r" : "") << line << (tty ? "" : "\n") << std::flush;
+    }
+    scan->wait();
+    std::signal(SIGINT, previous);
+    if (!o.quiet && tty) std::cerr << "\n";
+
+    const auto snap = scan->snapshot();
+    reports::Privacy priv{o.show_serial};
+    auto write_file = [&](const std::string* file, const std::string& content) {
+        if (!file) return true;
+        std::ofstream f(*file, std::ios::binary | std::ios::trunc);
+        if (!f || !(f << content)) {
+            std::cerr << "platter-cli: cannot write " << *file << "\n";
+            return false;
+        }
+        return true;
+    };
+    bool files_ok = write_file(get("csv"), reports::scan_to_csv(snap));
+    files_ok = write_file(get("report"), reports::scan_to_text(snap, priv)) && files_ok;
+
+    Out out(o);
+    out.text() << reports::scan_to_text(snap, priv);
+    if (o.flags.count("map")) print_ascii_map(out.text(), snap);
+    out.set_raw_json(reports::scan_to_json(snap, priv));
+    int code = kOk;
+    switch (snap.progress.state) {
+        case OperationState::completed: code = snap.stats.failed ? kScanErrors : kOk; break;
+        case OperationState::cancelled: code = kCancelled; break;
+        default: code = snap.stats.failed ? kScanErrors : kIoError; break;
+    }
+    if (snap.progress.state == OperationState::failed && !o.quiet)
+        std::cerr << "platter-cli: scan stopped: " << snap.progress.message << "\n";
+    code = out.flush(code);
+    return files_ok ? code : kFailure;
+}
+
 int usage_error(const std::string& msg) {
     std::cerr << "platter-cli: " << msg << "\nTry 'platter-cli --help'.\n";
     return kUsage;
@@ -483,6 +741,11 @@ int main(int argc, char** argv) {
         if (!arg(1) || *arg(1) != "list") return usage_error("usage: partitions list <device>");
         if (!arg(2)) return usage_error("partitions list needs a <device>");
         return cmd_partitions_list(*opts, *arg(2));
+    }
+    if (cmd == "surface") {
+        if (!arg(1) || *arg(1) != "scan") return usage_error("usage: surface scan <device>");
+        if (!arg(2)) return usage_error("surface scan needs a <device>");
+        return cmd_surface_scan(*opts, *arg(2));
     }
     if (cmd == "smart") {
         if (!arg(1) || *arg(1) != "show") return usage_error("usage: smart show <device>");

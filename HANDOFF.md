@@ -63,7 +63,7 @@ Windows MSVC and MinGW; no real-hardware run yet).
   with no retries. Durations come from `IOResult::duration_ns` on success.
 - Test double `tests/support/faulty_device.hpp`: bad LBAs, flaky LBAs (fail N
   then recover), fake per-LBA latency, real delay, simulated removal.
-- **67 test cases / 623 assertions passing**; operation/surface tests were
+- **72 test cases / 1009 assertions passing**; operation/surface tests were
   stress-run 25x randomized and pinned to one CPU with no flakes.
 
 - Scan export/import (`include/platter/reports/scan_report.hpp`, in
@@ -76,7 +76,13 @@ Windows MSVC and MinGW; no real-hardware run yet).
   duplicates and row count and rejects anything inconsistent
   (`corrupt_data`). Serials omitted / masked unless requested.
 
-Remaining for v0.2: CLI `surface scan`, GUI SURFACE tab with the sector map.
+- CLI `platter-cli surface scan <device>` (`cmd_surface_scan` in
+  src/cli/main.cpp): all ScanConfig options as flags, live progress on stderr
+  (\r line on a TTY, every 10 s otherwise), Ctrl+C -> `cancel()` with partial
+  results still written, `--csv/--report/--json -o/--map` outputs, exit 9 =
+  unreadable blocks, 13 = cancelled. Verified on images (incl. real SIGINT).
+
+Remaining for v0.2: GUI SURFACE tab with the sector map.
 
 ### Core (`platter-core`)
 - `Error` / `Result<T>` / `Status` (no exceptions across module boundaries;

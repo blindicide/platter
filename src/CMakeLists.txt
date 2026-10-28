@@ -44,3 +44,17 @@ platter_set_warnings(platter-partitions)
 add_library(platter-smart STATIC smart/smart.cpp)
 target_link_libraries(platter-smart PUBLIC platter-core PRIVATE nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-smart)
+
+# ------------------------------------------------------------- platter-reports
+add_library(platter-reports STATIC reports/json.cpp)
+target_link_libraries(platter-reports
+    PUBLIC platter-core platter-partitions platter-smart nlohmann_json::nlohmann_json)
+platter_set_warnings(platter-reports)
+
+# ----------------------------------------------------------------- platter-cli
+if(PLATTER_BUILD_CLI)
+    add_executable(platter-cli cli/main.cpp)
+    target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-reports)
+    platter_set_warnings(platter-cli)
+    install(TARGETS platter-cli RUNTIME DESTINATION bin)
+endif()

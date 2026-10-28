@@ -233,3 +233,75 @@ TEST_CASE("MBR type names", "[partitions][mbr]") {
     CHECK(mbr_type_name(0xEE) == "GPT protective");
     CHECK_THAT(mbr_type_name(0x99), ContainsSubstring("0x99"));
 }
+
+#ifndef _WIN32
+#include <catch2/catch_message.hpp>
+#include <fstream>
+#include "platter/core/process.hpp"
+
+// Cross-check against an independent implementation: util-linux sfdisk writes
+// the table, platter reads it back. Skipped when sfdisk is not installed.
+TEST_CASE("tables written by sfdisk are read back identically", "[partitions][crosscheck]") {
+    const auto sfdisk = find_in_path("sfdisk").empty() ? std::string("/usr/sbin/sfdisk") : find_in_path("sfdisk");
+    if (find_in_path(sfdisk).empty()) SKIP("sfdisk not available");
+
+    TempDir tmp;
+    auto run_sfdisk = [&](const std::filesystem::path& img, const std::string& script) {
+        const auto sp = tmp / "script.sfdisk";
+        std::ofstream(sp) << script;
+        // sfdisk reads the script from stdin; use sh only to redirect a file we wrote.
+        auto r = run_process({"sh", "-c", "\"$0\" -q \"$1\" < \"$2\"", sfdisk, img.string(), sp.string()},
+                             std::chrono::seconds(30));
+        REQUIRE(r);
+        INFO(r->err);
+        REQUIRE(r->exit_code == 0);
+    };
+
+    SECTION("GPT") {
+        const auto img = tmp / "gpt.img";
+        test::make_sparse_file(img, 256ull << 20);
+        run_sfdisk(img,
+                   "label: gpt\n"
+                   "label-id: A1B2C3D4-E5F6-4711-8899-AABBCCDDEEFF\n"
+                   "size=64MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name=\"EFI system\"\n"
+                   "size=128MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=\"root\"\n"
+                   "type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=\"data\"\n");
+        auto t = table_of(img);
+        REQUIRE(t);
+        CHECK(t->type == TableType::gpt);
+        CHECK(t->warnings.empty());
+        CHECK(t->protective_mbr);
+        CHECK(t->gpt_primary->disk_guid.to_string() == "A1B2C3D4-E5F6-4711-8899-AABBCCDDEEFF");
+        REQUIRE(t->partitions.size() == 3);
+        CHECK(t->partitions[0].first_lba == 2048);
+        CHECK(t->partitions[0].last_lba == 133119);
+        CHECK(t->partitions[0].name == "EFI system");
+        CHECK(t->partitions[1].first_lba == 133120);
+        CHECK(t->partitions[1].last_lba == 395263);
+        CHECK(t->partitions[2].first_lba == 395264);
+        CHECK(t->partitions[2].last_lba == 522239);
+        CHECK(t->partitions[2].type_name == "Microsoft basic data");
+    }
+    SECTION("MBR with logical partitions") {
+        const auto img = tmp / "mbr.img";
+        test::make_sparse_file(img, 128ull << 20);
+        run_sfdisk(img,
+                   "label: dos\nlabel-id: 0x3d74374d\n"
+                   "size=32MiB, type=7, bootable\ntype=f\nsize=24MiB, type=83\ntype=82\n");
+        auto t = table_of(img);
+        REQUIRE(t);
+        CHECK(t->type == TableType::mbr);
+        CHECK(t->mbr_disk_signature == 0x3d74374du);
+        CHECK(t->warnings.empty());
+        REQUIRE(t->partitions.size() == 4);
+        CHECK(t->partitions[0].bootable);
+        CHECK(t->partitions[1].extended_container);
+        CHECK(t->partitions[2].number == 5);
+        CHECK(t->partitions[2].first_lba == 69632);
+        CHECK(t->partitions[2].last_lba == 118783);
+        CHECK(t->partitions[3].number == 6);
+        CHECK(t->partitions[3].first_lba == 120832);
+        CHECK(t->partitions[3].last_lba == 262143);
+    }
+}
+#endif

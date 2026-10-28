@@ -66,9 +66,19 @@ Done:
   SMART/SELF_TEST are set only from actual smartctl results.
 - Process runner (`include/platter/core/process.hpp`): posix_spawnp / CreateProcessW,
   argv passed verbatim, stdout/stderr capture, kill on timeout.
-- **42 test cases / 343 assertions passing** (range math, CRC, image device,
+- Reports (`src/reports/json.cpp`, `platter-reports`): shared JSON schema for
+  CLI `--json` and future GUI exports; serials omitted unless requested.
+- `platter-cli` (`src/cli/main.cpp`): `devices list|info`, `partitions list`,
+  `smart show`, `version`; `--json -o -v -q --show-serial --sector-size -d`;
+  documented exit codes (docs/cli-reference.md). Images are auto-detected
+  (any regular file). Short names: `sda` -> /dev/sda, `1`/`pd1` ->
+  \\.\PhysicalDrive1. Every target is opened `OpenMode::read_only`.
+  Cross-compiles to `platter-cli.exe` with MinGW.
+- Parser cross-checked against util-linux **sfdisk** (independent
+  implementation) for GPT and MBR+logicals: identical LBAs, names, signatures.
+- **43 test cases / 374 assertions passing** (range math, CRC, image device,
   GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs,
-  SMART fixtures, process runner, fake-smartctl end-to-end).
+  SMART fixtures, process runner, fake-smartctl end-to-end, sfdisk cross-check).
 
 - Win32 backend (`src/platform/windows/`): `Win32FileDevice` (ReadFile/WriteFile
   with OVERLAPPED offsets, 1 GiB chunking, EOF -> short_transfer), PhysicalDrive
@@ -80,9 +90,8 @@ Done:
   Cross-compile: `cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake -DPLATTER_BUILD_TESTS=OFF -DPLATTER_BUILD_GUI=OFF`
 
 Next up (in order):
-1. `platter-cli`: `devices list|info`, `partitions list`, `smart show`, `--json`.
-2. Qt GUI skeleton with classic theme.
-3. GitHub Actions CI, docs (architecture, safety, cli-reference).
+1. Qt GUI skeleton with classic theme.
+2. GitHub Actions CI, docs (architecture, safety, cli-reference).
 
 ## 3. Layout
 

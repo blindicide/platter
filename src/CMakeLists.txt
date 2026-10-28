@@ -75,7 +75,8 @@ platter_set_warnings(platter-storage)
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
     add_executable(platter-cli cli/main.cpp)
-    target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface platter-reports)
+    target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
+        platter-benchmark platter-reports platter-storage)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()

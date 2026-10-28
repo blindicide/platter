@@ -90,7 +90,12 @@ disposable HDD / USB stick, with the important drive unplugged).
   `ata-MODEL_SERIAL` embed the serial; `reports::redact_stable_id()` masks it
   unless serials were requested.
 
-Remaining for v0.3: CLI `benchmark`, GUI BENCHMARK tab with graphs and history.
+- CLI: `benchmark read|history|show` (all BenchConfig options, live
+  progress, Ctrl+C, `--chart` ASCII charts, `--report`), `--save` /
+  `--history-db` for benchmark, surface scan and SMART. Saving is opt-in in
+  the CLI; a failed save only warns. `parse_size` accepts K/M/G[iB].
+
+Remaining for v0.3: GUI BENCHMARK tab with graphs and history.
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->

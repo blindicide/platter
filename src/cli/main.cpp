@@ -3,6 +3,7 @@
 // platter-cli: command-line front end over the same core as the GUI.
 // Every command is read-only. See docs/cli-reference.md.
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -24,8 +25,11 @@
 #include "platter/core/block_device.hpp"
 #include "platter/partitions/partition_table.hpp"
 #include "platter/platform/enumerate.hpp"
+#include "platter/benchmark/benchmark.hpp"
+#include "platter/reports/bench_report.hpp"
 #include "platter/reports/json.hpp"
 #include "platter/reports/scan_report.hpp"
+#include "platter/storage/history.hpp"
 #include "platter/smart/smart.hpp"
 #include "platter/surface/surface_scan.hpp"
 #include "platter/version.hpp"
@@ -98,6 +102,9 @@ Commands (all read-only):
   smart show <device>           SMART / NVMe health via smartctl
   partitions list <device>      Show the MBR/GPT partition table
   surface scan <device>         Read-only surface scan (latency map)
+  benchmark read <device>       Read benchmark (see --test)
+  benchmark history [<device>]  List saved benchmark sessions
+  benchmark show <id>           Show a saved benchmark session
   version                       Print version
 
 <device> is a device path (/dev/sda, \\.\PhysicalDrive1), a short name
@@ -130,9 +137,30 @@ Surface scan options:
   --map                 Print an ASCII latency map at the end
   (with --json / -o, the canonical JSON scan file is written)
 
+Benchmark options:
+  --test T              seq | random | access | curve | sizes | qd (default seq)
+  --block-size SIZE     Request size (defaults: seq/curve 1M, random/qd 4K,
+                        access 1 sector)
+  --qd N                Queue depth 1-64 (threads, each with its own handle)
+  --duration SEC        Time limit per phase
+  --size SIZE           Byte limit per phase (seq default 1G, sizes 256M)
+  --points N            Speed-curve sample points (default 100)
+  --point-size SIZE     Bytes read at each curve point (default 16M)
+  --sizes LIST          Block sizes for --test sizes, e.g. 4K,64K,1M
+  --qds LIST            Queue depths for --test qd, e.g. 1,4,16,32
+  --start/--end LBA     Test region (default whole device)
+  --buffered            Use the OS cache (results may not reflect the device)
+  --chart               Append an ASCII chart
+  --report FILE         Also write a text report
+
+History (SQLite; off unless asked):
+  --save                Record this benchmark / scan / SMART query in history
+  --history-db FILE     History database (default: per-user data directory)
+  --limit N             Rows for 'benchmark history' (default 30)
+
 Exit codes: 0 ok, 1 failure, 2 usage, 3 not found, 4 permission denied,
 5 busy, 6 I/O error, 7 unsupported, 8 smartctl missing/failed,
-9 scan found unreadable blocks, 10/11/12 health WARNING/CRITICAL/UNKNOWN
+9 scan / benchmark found unreadable blocks, 10/11/12 health WARNING/CRITICAL/UNKNOWN
 (smart show), 13 cancelled (Ctrl+C).
 )";
 
@@ -181,11 +209,13 @@ std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
             o.sector_size = static_cast<std::uint32_t>(std::stoul(*v));
         } else if (a == "--start" || a == "--end" || a == "--block-size" || a == "--order" || a == "--sample" ||
                    a == "--seed" || a == "--retries" || a == "--stop-after" || a == "--thresholds" ||
-                   a == "--csv" || a == "--report") {
+                   a == "--csv" || a == "--report" || a == "--test" || a == "--qd" || a == "--duration" ||
+                   a == "--size" || a == "--points" || a == "--point-size" || a == "--sizes" || a == "--qds" ||
+                   a == "--history-db" || a == "--limit") {
             auto v = need(a.c_str());
             if (!v) { exit_code = kUsage; return std::nullopt; }
             o.values[a.substr(2)] = *v;
-        } else if (a == "--buffered" || a == "--map") {
+        } else if (a == "--buffered" || a == "--map" || a == "--save" || a == "--chart") {
             o.flags.insert(a.substr(2));
         } else if (a.size() > 1 && a[0] == '-') {
             std::cerr << "platter-cli: unknown option '" << a << "'\n";
@@ -423,6 +453,28 @@ int cmd_partitions_list(const Options& o, const std::string& target) {
     return out.flush(kOk);
 }
 
+// ------------------------------------------------------------- history
+
+std::string history_path(const Options& o) {
+    auto it = o.values.find("history-db");
+    return it != o.values.end() ? it->second : storage::HistoryStore::default_path();
+}
+
+// Opens the history DB and runs `fn`; reports problems as warnings so a
+// failed save never hides the measurement that was just made.
+template <typename Fn>
+void save_to_history(const Options& o, Fn&& fn) {
+    const auto path = history_path(o);
+    auto store = storage::HistoryStore::open(path);
+    if (!store) {
+        std::cerr << "warning: not saved to history (" << store.error().describe() << ")\n";
+        return;
+    }
+    auto id = fn(**store);
+    if (!id) std::cerr << "warning: not saved to history (" << id.error().describe() << ")\n";
+    else if (!o.quiet) std::cerr << "Saved to history as #" << *id << " (" << path << ")\n";
+}
+
 int cmd_smart_show(const Options& o, const std::string& target) {
     Out out(o);
     if (is_image_path(target)) return fail(Error{Errc::unsupported, "image files have no SMART data"}, target);
@@ -486,6 +538,16 @@ int cmd_smart_show(const Options& o, const std::string& target) {
     env["smart"] = reports::to_json(r, {o.show_serial});
     env["assessment"] = reports::to_json(a);
     out.set_json(env);
+    if (o.flags.count("save")) {
+        auto info = describe_device(path);
+        DeviceInfo d = info ? *info : DeviceInfo{};
+        if (!info) {
+            d.path = path;
+            d.model = r.model;
+            d.serial = r.serial;
+        }
+        save_to_history(o, [&](storage::HistoryStore& h) { return h.record_smart(d, r, a); });
+    }
 
     switch (a.status) {
         case smart::Health::good: return out.flush(kOk);
@@ -509,13 +571,14 @@ std::optional<std::uint64_t> parse_u64(const std::string& s) {
     }
 }
 
-// "4096", "64K", "1M", "16MiB" -> bytes
+// "4096", "64K", "1M", "16MiB", "4G" -> bytes (binary multiples)
 std::optional<std::uint64_t> parse_size(std::string s) {
     std::uint64_t mult = 1;
-    for (auto* suf : {"KiB", "MiB", "K", "M", "k", "m"}) {
+    for (auto* suf : {"KiB", "MiB", "GiB", "K", "M", "G", "k", "m", "g"}) {
         const std::string sf = suf;
         if (s.size() > sf.size() && s.compare(s.size() - sf.size(), sf.size(), sf) == 0) {
-            mult = (sf[0] == 'K' || sf[0] == 'k') ? 1024 : 1024 * 1024;
+            const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(sf[0])));
+            mult = u == 'K' ? 1024ull : u == 'M' ? 1024ull * 1024 : 1024ull * 1024 * 1024;
             s.resize(s.size() - sf.size());
             break;
         }
@@ -689,6 +752,7 @@ int cmd_surface_scan(const Options& o, const std::string& target) {
         }
         return true;
     };
+    if (o.flags.count("save")) save_to_history(o, [&](storage::HistoryStore& h) { return h.record_scan(snap); });
     bool files_ok = write_file(get("csv"), reports::scan_to_csv(snap));
     files_ok = write_file(get("report"), reports::scan_to_text(snap, priv)) && files_ok;
 
@@ -706,6 +770,293 @@ int cmd_surface_scan(const Options& o, const std::string& target) {
         std::cerr << "platter-cli: scan stopped: " << snap.progress.message << "\n";
     code = out.flush(code);
     return files_ok ? code : kFailure;
+}
+
+int usage_error(const std::string& msg);
+
+// ------------------------------------------------------------- benchmark
+
+std::optional<std::vector<std::uint32_t>> parse_list(const std::string& text, bool sizes) {
+    std::vector<std::uint32_t> out;
+    std::istringstream in(text);
+    std::string part;
+    while (std::getline(in, part, ',')) {
+        auto v = sizes ? parse_size(part) : parse_u64(part);
+        if (!v || *v == 0 || *v > UINT32_MAX) return std::nullopt;
+        out.push_back(static_cast<std::uint32_t>(*v));
+    }
+    if (out.empty()) return std::nullopt;
+    return out;
+}
+
+void print_bar(std::ostream& os, const std::string& label, double value, double max, const std::string& unit) {
+    const int width = 46;
+    const int n = max > 0 ? static_cast<int>(value / max * width + 0.5) : 0;
+    char b[64];
+    std::snprintf(b, sizeof b, "  %-10s |", label.substr(0, 10).c_str());
+    os << b << std::string(static_cast<std::size_t>(std::max(0, n)), '#') << std::string(static_cast<std::size_t>(width - std::max(0, n)), ' ');
+    std::snprintf(b, sizeof b, "| %10.1f %s\n", value, unit.c_str());
+    os << b;
+}
+
+void print_bench_chart(std::ostream& os, const bench::BenchResult& r) {
+    using bench::BenchKind;
+    os << "\n";
+    if (r.config.kind == BenchKind::speed_curve && !r.positions.empty()) {
+        // Throughput vs position, 64 columns x 12 rows.
+        const int cols = 64, rows = 12;
+        double hi = 0;
+        for (const auto& p : r.positions) hi = std::max(hi, p.bytes_per_sec / 1e6);
+        // Each column shows the best point among those mapping to it, or the
+        // nearest point when there are fewer points than columns.
+        const std::size_t n = r.positions.size();
+        std::vector<double> col(static_cast<std::size_t>(cols), 0);
+        for (std::size_t c = 0; c < static_cast<std::size_t>(cols); ++c) {
+            const std::size_t lo = c * n / static_cast<std::size_t>(cols);
+            const std::size_t hi_i = std::max(lo + 1, (c + 1) * n / static_cast<std::size_t>(cols));
+            for (std::size_t i = lo; i < std::min(hi_i, n); ++i) col[c] = std::max(col[c], r.positions[i].bytes_per_sec / 1e6);
+        }
+        os << "Read speed vs position (MB/s)\n";
+        for (int row = rows; row >= 1; --row) {
+            const double level = hi * row / rows;
+            char lab[16];
+            std::snprintf(lab, sizeof lab, "%8.0f |", level);
+            os << lab;
+            for (int c = 0; c < cols; ++c) os << (col[static_cast<std::size_t>(c)] >= level - hi / (2.0 * rows) ? '*' : ' ');
+            os << "\n";
+        }
+        os << "         +" << std::string(cols, '-') << "\n          start of region" << std::string(cols - 26, ' ')
+           << "end\n";
+        return;
+    }
+    if (r.phases.size() > 1) {
+        const bool iops = r.config.kind == BenchKind::queue_depths;
+        double hi = 0;
+        for (const auto& p : r.phases) hi = std::max(hi, iops ? p.metrics.iops : p.metrics.mb_per_s);
+        os << (iops ? "IOPS by queue depth\n" : "Throughput by block size\n");
+        for (const auto& p : r.phases)
+            print_bar(os, p.label, iops ? p.metrics.iops : p.metrics.mb_per_s, hi, iops ? "IOPS" : "MB/s");
+        return;
+    }
+    if (!r.timeline.empty()) {
+        double hi = 0;
+        for (const auto& t : r.timeline) hi = std::max(hi, t.bytes_per_sec / 1e6);
+        os << "Throughput over time (250 ms samples)\n";
+        const std::size_t step = std::max<std::size_t>(1, r.timeline.size() / 20);
+        for (std::size_t i = 0; i < r.timeline.size(); i += step) {
+            char lab[16];
+            std::snprintf(lab, sizeof lab, "%.2f s", r.timeline[i].t_s);
+            print_bar(os, lab, r.timeline[i].bytes_per_sec / 1e6, hi, "MB/s");
+        }
+    }
+}
+
+int cmd_benchmark_read(const Options& o, const std::string& target) {
+    using namespace bench;
+    BenchConfig c;
+    auto get = [&](const char* k) -> const std::string* {
+        auto it = o.values.find(k);
+        return it == o.values.end() ? nullptr : &it->second;
+    };
+    auto bad = [](const std::string& m) {
+        std::cerr << "platter-cli: " << m << "\n";
+        return kUsage;
+    };
+    if (auto v = get("test")) {
+        static const std::pair<const char*, BenchKind> kinds[] = {
+            {"seq", BenchKind::sequential},     {"sequential", BenchKind::sequential}, {"random", BenchKind::random},
+            {"access", BenchKind::access_time}, {"curve", BenchKind::speed_curve},     {"sizes", BenchKind::block_sizes},
+            {"qd", BenchKind::queue_depths}};
+        bool found = false;
+        for (const auto& [n, k] : kinds)
+            if (*v == n) {
+                c.kind = k;
+                found = true;
+            }
+        if (!found) return bad("--test must be seq, random, access, curve, sizes or qd");
+    }
+    if (auto v = get("block-size")) {
+        auto n = parse_size(*v);
+        if (!n || *n > UINT32_MAX) return bad("--block-size must be a size such as 4K or 1M");
+        c.block_bytes = static_cast<std::uint32_t>(*n);
+    }
+    if (auto v = get("qd")) {
+        auto n = parse_u64(*v);
+        if (!n || *n < 1 || *n > 64) return bad("--qd must be between 1 and 64");
+        c.queue_depth = static_cast<std::uint32_t>(*n);
+    }
+    if (auto v = get("duration")) {
+        try {
+            c.max_seconds = std::stod(*v);
+        } catch (...) {
+            return bad("--duration must be seconds");
+        }
+        if (c.max_seconds <= 0 || c.max_seconds > 86400) return bad("--duration must be between 0 and 86400 seconds");
+    }
+    if (auto v = get("size")) {
+        auto n = parse_size(*v);
+        if (!n || *n == 0) return bad("--size must be a size such as 256M or 4G");
+        c.max_bytes = *n;
+    }
+    if (auto v = get("points")) {
+        auto n = parse_u64(*v);
+        if (!n || *n < 2 || *n > 10000) return bad("--points must be between 2 and 10000");
+        c.curve_points = static_cast<std::uint32_t>(*n);
+    }
+    if (auto v = get("point-size")) {
+        auto n = parse_size(*v);
+        if (!n || *n == 0) return bad("--point-size must be a size such as 16M");
+        c.curve_bytes_per_point = *n;
+    }
+    if (auto v = get("sizes")) {
+        auto l = parse_list(*v, true);
+        if (!l) return bad("--sizes must look like 4K,64K,1M");
+        c.sweep_block_sizes = *l;
+    }
+    if (auto v = get("qds")) {
+        auto l = parse_list(*v, false);
+        if (!l) return bad("--qds must look like 1,4,16,32");
+        c.sweep_queue_depths = *l;
+    }
+    if (auto v = get("start")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--start must be an LBA number");
+        c.start_lba = *n;
+    }
+    if (auto v = get("end")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--end must be an LBA number");
+        c.end_lba = *n;
+    }
+    if (auto v = get("seed")) {
+        auto n = parse_u64(*v);
+        if (!n) return bad("--seed must be a number");
+        c.seed = *n;
+    }
+    c.direct_io = !o.flags.count("buffered");
+
+    const bool image = is_image_path(target);
+    const std::string path = image ? target : expand_device(target);
+    auto created = create_benchmark(path, image, c, o.sector_size);
+    if (!created) return fail(created.error(), path);
+    auto& b = *created;
+    if (auto v = b->validate(); !v) return fail(v.error(), "invalid benchmark configuration");
+    const auto& ec = b->config();
+    if (!o.quiet)
+        std::cerr << bench_kind_title(ec.kind) << " on " << path << " (read-only), block " << ec.block_bytes
+                  << " bytes, QD " << ec.queue_depth << ", " << (ec.direct_io ? "direct" : "buffered")
+                  << " I/O. Ctrl+C to stop.\n";
+
+    g_interrupted = false;
+    auto previous = std::signal(SIGINT, on_sigint);
+    if (auto st = b->start(); !st) return fail(st.error(), "starting benchmark");
+    const bool tty =
+#ifdef _WIN32
+        true;
+#else
+        isatty(2) != 0;
+#endif
+    auto last = std::chrono::steady_clock::now() - std::chrono::hours(1);
+    bool cancel_sent = false;
+    while (!is_terminal(b->state())) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (g_interrupted && !cancel_sent) {
+            b->cancel();
+            cancel_sent = true;
+            if (!o.quiet) std::cerr << "\nStopping...\n";
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (o.quiet || now - last < (tty ? std::chrono::milliseconds(500) : std::chrono::seconds(10))) continue;
+        last = now;
+        const auto p = b->progress();
+        char line[160];
+        std::snprintf(line, sizeof line, "[%5.1f%%] %8.2f MB/s  LBA %-12llu errors %llu", b->fraction() * 100.0,
+                      p.current_bytes_per_sec / 1e6, static_cast<unsigned long long>(p.current_lba),
+                      static_cast<unsigned long long>(p.errors));
+        std::cerr << (tty ? "\r" : "") << line << (tty ? "" : "\n") << std::flush;
+    }
+    b->wait();
+    std::signal(SIGINT, previous);
+    if (!o.quiet && tty) std::cerr << "\n";
+
+    const auto r = b->result();
+    reports::Privacy priv{o.show_serial};
+    Out out(o);
+    out.text() << reports::bench_to_text(r, priv);
+    if (o.flags.count("chart")) print_bench_chart(out.text(), r);
+    out.set_raw_json(reports::bench_to_json(r, priv));
+    if (o.flags.count("save") && r.state != OperationState::failed)
+        save_to_history(o, [&](storage::HistoryStore& h) { return h.record_benchmark(r); });
+    bool files_ok = true;
+    if (auto file = get("report")) {
+        std::ofstream f(*file, std::ios::binary | std::ios::trunc);
+        files_ok = f && (f << reports::bench_to_text(r, priv));
+        if (!files_ok) std::cerr << "platter-cli: cannot write " << *file << "\n";
+    }
+    std::uint64_t errors = 0;
+    for (const auto& ph : r.phases) errors += ph.metrics.errors;
+    int code = kOk;
+    switch (r.state) {
+        case OperationState::completed: code = errors ? kScanErrors : kOk; break;
+        case OperationState::cancelled: code = kCancelled; break;
+        default:
+            if (!o.quiet) std::cerr << "platter-cli: benchmark stopped: " << r.message << "\n";
+            code = errors ? kScanErrors : kIoError;
+            break;
+    }
+    code = out.flush(code);
+    return files_ok ? code : kFailure;
+}
+
+int cmd_benchmark_history(const Options& o, const std::string* target) {
+    auto store = storage::HistoryStore::open(history_path(o));
+    if (!store) return fail(store.error(), "history");
+    std::string key;
+    if (target) {
+        auto info = describe_target(*target, o);
+        if (!info) return fail(info.error(), *target);
+        key = storage::HistoryStore::device_key(*info);
+    }
+    int limit = 30;
+    if (auto it = o.values.find("limit"); it != o.values.end()) {
+        auto n = parse_u64(it->second);
+        if (!n || *n == 0 || *n > 100000) return usage_error("--limit must be a positive number");
+        limit = static_cast<int>(*n);
+    }
+    auto rows = (*store)->list(storage::SessionKind::benchmark, key, limit);
+    if (!rows) return fail(rows.error(), "history");
+    Out out(o);
+    json arr = json::array();
+    TextTable t({"#", "Started (UTC)", "Test", "Device", "State", "Result"},
+                {TextTable::Align::right});
+    for (const auto& r : *rows) {
+        arr.push_back({{"id", r.id}, {"started_utc", r.started_utc}, {"test", r.subtype}, {"device_key", r.device_key},
+                       {"device_model", r.device_model}, {"state", r.state}, {"headline", r.headline},
+                       {"value", r.primary_value}});
+        t.add({std::to_string(r.id), r.started_utc, r.subtype, r.device_model.empty() ? r.device_key : r.device_model,
+               r.state, r.headline});
+    }
+    auto env = reports::envelope("benchmark-history");
+    env["database"] = (*store)->path();
+    env["sessions"] = arr;
+    out.set_json(env);
+    if (rows->empty()) out.text() << "No saved benchmarks in " << (*store)->path() << "\n";
+    else t.print(out.text());
+    return out.flush(kOk);
+}
+
+int cmd_benchmark_show(const Options& o, const std::string& id_text) {
+    auto id = parse_u64(id_text);
+    if (!id) return usage_error("benchmark show needs a numeric session id");
+    auto store = storage::HistoryStore::open(history_path(o));
+    if (!store) return fail(store.error(), "history");
+    auto r = (*store)->load_benchmark(static_cast<std::int64_t>(*id));
+    if (!r) return fail(r.error(), "history");
+    Out out(o);
+    out.text() << reports::bench_to_text(*r);
+    if (o.flags.count("chart")) print_bench_chart(out.text(), *r);
+    out.set_raw_json(reports::bench_to_json(*r));
+    return out.flush(kOk);
 }
 
 int usage_error(const std::string& msg) {
@@ -746,6 +1097,18 @@ int main(int argc, char** argv) {
         if (!arg(1) || *arg(1) != "scan") return usage_error("usage: surface scan <device>");
         if (!arg(2)) return usage_error("surface scan needs a <device>");
         return cmd_surface_scan(*opts, *arg(2));
+    }
+    if (cmd == "benchmark") {
+        if (arg(1) && *arg(1) == "read") {
+            if (!arg(2)) return usage_error("benchmark read needs a <device>");
+            return cmd_benchmark_read(*opts, *arg(2));
+        }
+        if (arg(1) && *arg(1) == "history") return cmd_benchmark_history(*opts, arg(2));
+        if (arg(1) && *arg(1) == "show") {
+            if (!arg(2)) return usage_error("benchmark show needs a session id");
+            return cmd_benchmark_show(*opts, *arg(2));
+        }
+        return usage_error("usage: benchmark read <device> | benchmark history [<device>] | benchmark show <id>");
     }
     if (cmd == "smart") {
         if (!arg(1) || *arg(1) != "show") return usage_error("usage: smart show <device>");

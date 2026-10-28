@@ -15,6 +15,9 @@ platter-cli [options] <command> [arguments]
 | `devices info <device>` | Identification, geometry, usage and the capability matrix for one device or image. | No |
 | `partitions list <device>` | Reads and validates the MBR/GPT. Reports CRC problems, backup-GPT fallback, overlaps, out-of-bounds entries and 1 MiB alignment. | Yes for physical devices (reads sectors) |
 | `surface scan <device>` | Read-only block-level surface scan: per-block latency classes, unreadable ranges, throughput and latency percentiles. Prints a text report (or JSON with `--json`); can also write CSV and a text report. Ctrl+C stops cleanly and still reports partial results. | Yes for physical devices |
+| `benchmark read <device>` | Read benchmark: `--test seq` (default), `random`, `access`, `curve`, `sizes`, `qd`. Reports MB/s, MiB/s, IOPS and latency percentiles per phase, plus caveats when results may not reflect the physical device. `--chart` adds an ASCII chart. | Yes for physical devices |
+| `benchmark history [<device>]` | Lists saved benchmark sessions (newest first), optionally for one device. | No |
+| `benchmark show <id>` | Re-prints a saved session (text, or JSON with `--json`; `--chart` works too). | No |
 | `smart show <device>` | Runs `smartctl --json=c -a` and prints attributes / NVMe health log plus a conservative assessment with every contributing observation. | Usually yes |
 | `version` | Prints the version. | No |
 
@@ -66,6 +69,41 @@ sudo platter-cli surface scan /dev/sdb --block-size 256K --csv sdb.csv --json -o
 platter-cli surface scan 1 --order sampled --sample 5       # Windows: PhysicalDrive1, elevated prompt
 ```
 
+### Benchmark options
+
+| Option | Meaning |
+|---|---|
+| `--test T` | `seq`, `random`, `access` (single-sector random reads, QD 1), `curve` (read speed at evenly spaced positions), `sizes` (sequential at several block sizes), `qd` (random at several queue depths). |
+| `--block-size SIZE` | Request size. Defaults: `seq`/`curve`/`sizes` 1M, `random`/`qd` 4K, `access` one sector. |
+| `--qd N` | Queue depth 1-64. Implemented as N threads, each with its own device handle, issuing synchronous reads; with direct I/O that keeps N requests outstanding at the device. |
+| `--duration SEC` | Time limit per phase (defaults: seq 30, random 10, access 5, sweeps 3 per step). |
+| `--size SIZE` | Byte limit per phase (`256M`, `4G`; defaults: seq 1G, sizes 256M per step). |
+| `--points N`, `--point-size SIZE` | Speed curve sampling (default 100 points x 16M). |
+| `--sizes LIST`, `--qds LIST` | Steps for the sweeps, e.g. `--sizes 4K,64K,1M,4M`, `--qds 1,4,16,32`. |
+| `--start LBA`, `--end LBA` | Test region. |
+| `--buffered` | Read through the OS cache (reported as a caveat). |
+| `--chart` | ASCII chart: speed vs position, bars per step, or throughput over time. |
+| `--report FILE` | Also write the text report. |
+
+Throughput is bytes divided by wall-clock time; latency is per request. Write
+benchmarks are not available yet (they need the destructive-operation
+safeguards planned for v0.4).
+
+### History
+
+`--save` records a benchmark, surface scan or SMART query in a local SQLite
+database (`--history-db FILE`, default `%APPDATA%\platter\history.db` or
+`~/.local/share/platter/history.db`, or `$PLATTER_HISTORY_DB`). Nothing is saved
+unless you ask. The database never contains a raw serial number: devices are
+identified by hashes. A failed save prints a warning and does not change the
+exit code.
+
+```sh
+sudo platter-cli benchmark read /dev/sdb --test curve --chart --save
+platter-cli benchmark history sdb
+platter-cli benchmark show 12 --chart
+```
+
 ## Exit codes
 
 | Code | Meaning |
@@ -79,7 +117,7 @@ platter-cli surface scan 1 --order sampled --sample 5       # Windows: PhysicalD
 | 6 | I/O error, short read, timeout or device removed |
 | 7 | Operation unsupported for this target (e.g. SMART on an image) |
 | 8 | smartctl missing or failed to run |
-| 9 | `surface scan`: finished (or stopped) with unreadable blocks |
+| 9 | `surface scan` / `benchmark read`: finished (or stopped) with unreadable blocks |
 | 10 | `smart show`: health WARNING |
 | 11 | `smart show`: health CRITICAL |
 | 12 | `smart show`: health UNKNOWN |
@@ -90,8 +128,7 @@ platter-cli surface scan 1 --order sampled --sample 5       # Windows: PhysicalD
 platter does not send SMART commands itself; it runs smartmontools.
 Lookup order: `$PLATTER_SMARTCTL`, `PATH`, then
 `C:\Program Files\smartmontools\bin\smartctl.exe` (Windows) or
-`/usr/sbin/smartctl` (Linux). Only the read-only `-a` query is ever issued in
-v0.1. On Windows, `\\.\PhysicalDriveN` is passed to smartctl as `/dev/pdN`.
+`/usr/sbin/smartctl` (Linux). Only the read-only `-a` query is ever issued. On Windows, `\\.\PhysicalDriveN` is passed to smartctl as `/dev/pdN`.
 
 ## Destructive commands (future)
 

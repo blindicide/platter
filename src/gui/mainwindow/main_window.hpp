@@ -19,6 +19,7 @@ class LogModel;
 class InfoTab;
 class SmartTab;
 class PartitionsTab;
+class SurfaceTab;
 class LogTab;
 
 class MainWindow final : public QMainWindow {
@@ -36,6 +37,7 @@ public:
     void readPartitionsNow();
     void selectIndex(int index);
     void querySmartNow() { querySmart(); }
+    SurfaceTab* surfaceTab() const { return surface_tab_; }
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -75,6 +77,7 @@ private:
     InfoTab* info_tab_ = nullptr;
     SmartTab* smart_tab_ = nullptr;
     PartitionsTab* part_tab_ = nullptr;
+    SurfaceTab* surface_tab_ = nullptr;
     LogTab* log_tab_ = nullptr;
 
     // Summary panel
@@ -100,6 +103,7 @@ private:
     QAction* act_smart_ = nullptr;
     QAction* act_caps_ = nullptr;
     QAction* act_partitions_ = nullptr;
+    QAction* act_surface_ = nullptr;
     QAction* act_show_serials_ = nullptr;
     QAction* act_about_ = nullptr;
     QAction* act_license_ = nullptr;

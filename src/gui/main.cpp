@@ -5,6 +5,7 @@
 #include <QTimer>
 
 #include "mainwindow/main_window.hpp"
+#include "tabs/surface_tab.hpp"
 #include "platter/version.hpp"
 #include "styles/classic_theme.hpp"
 
@@ -29,7 +30,10 @@ int main(int argc, char** argv) {
     QCommandLineOption size({QStringLiteral("size")}, QStringLiteral("Window size WxH."), QStringLiteral("WxH"));
     QCommandLineOption select({QStringLiteral("select")}, QStringLiteral("Select device by index."), QStringLiteral("n"));
     QCommandLineOption smart_now({QStringLiteral("query-smart")}, QStringLiteral("Query SMART for the selection."));
-    cli.addOptions({sector, shot, tab, size, select, smart_now});
+    QCommandLineOption open_scan({QStringLiteral("open-scan")}, QStringLiteral("Open a saved surface scan (JSON)."),
+                                 QStringLiteral("file"));
+    QCommandLineOption start_scan({QStringLiteral("start-scan")}, QStringLiteral("Start a surface scan on the selection."));
+    cli.addOptions({sector, shot, tab, size, select, smart_now, open_scan, start_scan});
     cli.process(app);
 
     platter::gui::MainWindow w;
@@ -38,6 +42,8 @@ int main(int argc, char** argv) {
     if (cli.isSet(select)) w.selectIndex(cli.value(select).toInt());
     if (cli.isSet(tab)) w.selectTab(cli.value(tab));
     if (cli.isSet(smart_now)) w.querySmartNow();
+    if (cli.isSet(open_scan)) w.surfaceTab()->openScanFile(cli.value(open_scan));
+    if (cli.isSet(start_scan)) w.surfaceTab()->startScan();
     if (cli.isSet(size)) {
         const auto parts = cli.value(size).split(QLatin1Char('x'));
         if (parts.size() == 2) w.resize(parts[0].toInt(), parts[1].toInt());

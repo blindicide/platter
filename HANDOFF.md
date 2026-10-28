@@ -34,8 +34,10 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.2 Surface Testing — in progress** (v0.1 done; CI green on Linux,
-Windows MSVC and MinGW; no real-hardware run yet).
+Milestone: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
+green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
+v0.2 acceptance needs "supported physical devices", i.e. the owner's
+disposable HDD / USB stick, with the important drive unplugged).
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->
@@ -82,7 +84,23 @@ Windows MSVC and MinGW; no real-hardware run yet).
   results still written, `--csv/--report/--json -o/--map` outputs, exit 9 =
   unreadable blocks, 13 = cancelled. Verified on images (incl. real SIGINT).
 
-Remaining for v0.2: GUI SURFACE tab with the sector map.
+- GUI SURFACE tab (`src/gui/tabs/surface_tab.*`, `src/gui/widgets/surface_map.*`):
+  settings panel (mode READ; VERIFY/WRITE listed but disabled "[v0.4]"),
+  Start / Pause-Resume / Stop, Open Scan... (loads JSON for viewing or
+  comparison), Export... (JSON / CSV / text by filter, serials omitted).
+  `SurfaceMap`: QAbstractScrollArea painting only visible rows; 9 px cells,
+  worst-class-per-cell aggregation, Fit (auto power-of-two) or fixed zoom,
+  Ctrl+wheel zoom, click / arrow-key selection. Legend with per-class counts,
+  statistics panel, selected-cell details (block and LBA range, size, slowest
+  read, throughput, errors, retries, time). Polls the scan every 250 ms. The
+  tab owns the SurfaceScan; a running scan stays bound to its device even if
+  the selection changes; closing the window mid-scan asks first.
+  Operations > Surface Test (F4) and a toolbar button jump to the tab.
+  Dev aids: `--open-scan FILE`, `--start-scan`.
+
+v0.2 open items: real-hardware validation; VERIFY mode (needs ATA VERIFY /
+SCSI VERIFY passthrough or an explicitly documented fallback); scan history in
+SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 
 ### Core (`platter-core`)
 - `Error` / `Result<T>` / `Status` (no exceptions across module boundaries;

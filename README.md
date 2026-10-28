@@ -6,8 +6,8 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.1 (foundation), read-only.** Nothing in this version opens a
-> device for writing. See [HANDOFF.md](HANDOFF.md) for the detailed state of
+> **Status: v0.2 (surface testing), read-only.** Nothing in this version opens
+> a device for writing. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
 ## What works today
@@ -21,8 +21,13 @@ Win2000-style Qt Widgets interface.
 - SMART and NVMe health through smartmontools (`smartctl --json`), with a
   conservative GOOD / WARNING / CRITICAL / UNKNOWN assessment that lists every
   contributing observation
+- Read-only surface scans: LBA ranges, block sizes, forward / reverse /
+  random / sampled order, retries, direct I/O, configurable latency classes,
+  per-block results, latency percentiles, pause / resume / cancel, and
+  JSON / CSV / text export (saved scans can be reopened)
 - `platter-cli` with JSON output and documented exit codes
-- `platter-gui` with INFO, SMART, PARTITIONS and LOG tabs
+- `platter-gui` with INFO, SMART, SURFACE (Victoria-style latency map),
+  PARTITIONS and LOG tabs
 
 ## Building
 
@@ -55,6 +60,7 @@ platter-cli devices list
 platter-cli devices info sda                # or: devices info 1   (Windows: PhysicalDrive1)
 sudo platter-cli partitions list /dev/sdb
 sudo platter-cli smart show /dev/sda --json -o sda-smart.json
+sudo platter-cli surface scan /dev/sdb --csv sdb.csv --map
 platter-cli partitions list disk.img        # images need no privileges
 ```
 

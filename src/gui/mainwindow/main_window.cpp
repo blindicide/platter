@@ -25,6 +25,7 @@
 #include <QThread>
 #include <QToolBar>
 
+#include "../tabs/surface_tab.hpp"
 #include "../tabs/tabs.hpp"
 #include "../widgets/log_model.hpp"
 #include "../widgets/table_tools.hpp"
@@ -136,6 +137,11 @@ void MainWindow::buildActions() {
         readPartitions();
     });
 
+    act_surface_ = new QAction(st->standardIcon(QStyle::SP_MediaPlay), tr("&Surface Test..."), this);
+    act_surface_->setShortcut(QKeySequence(QStringLiteral("F4")));
+    act_surface_->setStatusTip(tr("Read-only surface scan with a latency map"));
+    connect(act_surface_, &QAction::triggered, this, [this] { selectTab(QStringLiteral("SURFACE")); });
+
     act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
     act_show_serials_->setCheckable(true);
     act_show_serials_->setStatusTip(tr("Serial numbers are masked on screen and omitted from reports by default"));
@@ -168,7 +174,7 @@ void MainWindow::buildMenus() {
     dev->addAction(planned(tr("Re&scan Device"), QStringLiteral("v0.7")));
 
     auto* ops = menuBar()->addMenu(tr("&Operations"));
-    ops->addAction(planned(tr("&Surface Test..."), QStringLiteral("v0.2")));
+    ops->addAction(act_surface_);
     ops->addAction(planned(tr("&Benchmark..."), QStringLiteral("v0.3")));
     ops->addAction(planned(tr("&Partition Manager..."), QStringLiteral("v0.5")));
     ops->addSeparator();
@@ -221,6 +227,7 @@ void MainWindow::buildToolBar() {
     tb->addAction(act_identify_);
     tb->addAction(act_smart_);
     tb->addAction(act_partitions_);
+    tb->addAction(act_surface_);
     tb->addSeparator();
     tb->addAction(act_save_report_);
 }
@@ -267,11 +274,10 @@ void MainWindow::buildCentral() {
     log_tab_ = new LogTab(log_, tabs_);
     tabs_->addTab(info_tab_, tr("INFO"));
     tabs_->addTab(smart_tab_, tr("SMART"));
-    tabs_->addTab(new PlannedTab(tr("Surface Test"), QStringLiteral("v0.2"),
-                                 tr("Block-level read/verify scan with a latency-classified sector map, "
-                                    "configurable LBA range, block size and access pattern."),
-                                 tabs_),
-                  tr("SURFACE"));
+    surface_tab_ = new SurfaceTab(tabs_);
+    tabs_->addTab(surface_tab_, tr("SURFACE"));
+    connect(surface_tab_, &SurfaceTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(new PlannedTab(tr("Benchmark"), QStringLiteral("v0.3"),
                                  tr("Sequential and random read benchmarks, access time, full-disk speed curve "
                                     "and queue-depth testing."),
@@ -349,6 +355,16 @@ void MainWindow::restoreSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
+    if (surface_tab_->isRunning()) {
+        const auto answer = QMessageBox::question(this, tr("Surface Scan Running"),
+                                                  tr("A surface scan is still running. Stop it and exit?"),
+                                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            e->ignore();
+            return;
+        }
+        surface_tab_->stopAndWait();
+    }
     QSettings s;
     s.setValue(QStringLiteral("window/geometry"), saveGeometry());
     s.setValue(QStringLiteral("window/state"), saveState());
@@ -467,6 +483,7 @@ void MainWindow::showCurrent() {
     smart_tab_->setBusy(busy_smart_);
     part_tab_->setDevice(e);
     part_tab_->setBusy(busy_parts_);
+    surface_tab_->setDevice(e);
     updateSummary();
     const bool has = e != nullptr;
     act_save_report_->setEnabled(has);

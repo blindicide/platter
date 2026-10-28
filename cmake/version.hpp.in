@@ -1,0 +1,6 @@
+#pragma once
+
+namespace platter {
+inline constexpr const char* kVersion = "@PROJECT_VERSION@";
+inline constexpr const char* kProjectName = "platter";
+}  // namespace platter

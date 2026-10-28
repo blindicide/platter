@@ -1,0 +1,9 @@
+/build*/
+/out/
+.cache/
+compile_commands.json
+*.img
+*.img.zst
+CMakeUserPresets.json
+.vs/
+.vscode/

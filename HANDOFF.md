@@ -67,8 +67,17 @@ disposable HDD / USB stick, with the important drive unplugged).
 - 14 benchmark test cases (stress-run randomized x15 and pinned to 1 CPU x8,
   no flakes). Full suite ~2.7 s.
 
-Remaining for v0.3: benchmark JSON/text reports, SQLite history store,
-CLI `benchmark`, GUI BENCHMARK tab with graphs and history.
+- SHA-256 (`include/platter/core/sha256.hpp`), verified against FIPS 180-4
+  vectors (incl. 1M x 'a' in odd chunks). Used to hash serials for device keys.
+- Benchmark reports (`include/platter/reports/bench_report.hpp`): canonical
+  compact JSON (kind `benchmark`, `bench_schema` 1; config, phases with full
+  metrics, timeline, positions, latency buckets, caveats; serial omitted
+  unless requested) + strict loader + text report with every setting.
+- **Agents: build locally with `-DPLATTER_WERROR=ON`.** CI uses -Werror and a
+  -Wshadow in test code slipped through a non-Werror local build once.
+
+Remaining for v0.3: SQLite history store, CLI `benchmark`, GUI BENCHMARK tab
+with graphs and history.
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->

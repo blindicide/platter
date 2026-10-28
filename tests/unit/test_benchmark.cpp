@@ -174,7 +174,7 @@ TEST_CASE("access time uses single-sector QD1 reads", "[benchmark]") {
     CHECK(r.phases[0].queue_depth == 1);
     CHECK(rig.opens == 2);
     CHECK(r.headline().find(" ms") != std::string::npos);
-    CHECK(std::all_of(rig.reads.begin(), rig.reads.end(), [](auto& r) { return r.second == 512; }));
+    CHECK(std::all_of(rig.reads.begin(), rig.reads.end(), [](auto& rd) { return rd.second == 512; }));
 }
 
 TEST_CASE("speed curve samples evenly spaced positions", "[benchmark]") {

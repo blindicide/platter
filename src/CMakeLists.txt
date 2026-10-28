@@ -6,6 +6,7 @@ add_library(platter-core STATIC
     core/bytes.cpp
     core/operation.cpp
     core/histogram.cpp
+    core/sha256.cpp
     platform/image/image_info.cpp
     platform/privileges.cpp
 )
@@ -61,9 +62,9 @@ target_link_libraries(platter-benchmark PUBLIC platter-core)
 platter_set_warnings(platter-benchmark)
 
 # ------------------------------------------------------------- platter-reports
-add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp)
+add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp reports/bench_report.cpp)
 target_link_libraries(platter-reports
-    PUBLIC platter-core platter-partitions platter-smart platter-surface nlohmann_json::nlohmann_json)
+    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
 # ----------------------------------------------------------------- platter-cli

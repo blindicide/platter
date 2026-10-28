@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <memory>
 #include <vector>
 
 #include "device_entry.hpp"
@@ -13,6 +14,10 @@ class QTabWidget;
 class QTableView;
 class QAction;
 
+namespace platter::storage {
+class HistoryStore;
+}
+
 namespace platter::gui {
 
 class LogModel;
@@ -20,6 +25,7 @@ class InfoTab;
 class SmartTab;
 class PartitionsTab;
 class SurfaceTab;
+class BenchmarkTab;
 class LogTab;
 
 class MainWindow final : public QMainWindow {
@@ -38,6 +44,7 @@ public:
     void selectIndex(int index);
     void querySmartNow() { querySmart(); }
     SurfaceTab* surfaceTab() const { return surface_tab_; }
+    BenchmarkTab* benchmarkTab() const { return bench_tab_; }
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -58,6 +65,7 @@ private:
     void buildToolBar();
     void buildCentral();
     void buildStatusBar();
+    void openHistory();
     void restoreSettings();
     void showCurrent();
     void updateSummary();
@@ -78,6 +86,9 @@ private:
     SmartTab* smart_tab_ = nullptr;
     PartitionsTab* part_tab_ = nullptr;
     SurfaceTab* surface_tab_ = nullptr;
+    BenchmarkTab* bench_tab_ = nullptr;
+    std::unique_ptr<storage::HistoryStore> history_;
+    bool record_history_ = true;
     LogTab* log_tab_ = nullptr;
 
     // Summary panel
@@ -104,6 +115,8 @@ private:
     QAction* act_caps_ = nullptr;
     QAction* act_partitions_ = nullptr;
     QAction* act_surface_ = nullptr;
+    QAction* act_benchmark_ = nullptr;
+    QAction* act_record_ = nullptr;
     QAction* act_show_serials_ = nullptr;
     QAction* act_about_ = nullptr;
     QAction* act_license_ = nullptr;

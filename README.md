@@ -6,7 +6,7 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.2 (surface testing), read-only.** Nothing in this version opens
+> **Status: v0.3 (benchmarking), read-only.** Nothing in this version opens
 > a device for writing. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
@@ -25,9 +25,15 @@ Win2000-style Qt Widgets interface.
   random / sampled order, retries, direct I/O, configurable latency classes,
   per-block results, latency percentiles, pause / resume / cancel, and
   JSON / CSV / text export (saved scans can be reopened)
+- Read benchmarks: sequential, random (IOPS), access time, full-disk speed
+  curve, block-size and queue-depth sweeps, with latency percentiles, charts
+  and explicit caveats when results may reflect caches rather than the device
+- Local history in SQLite (benchmarks, scans, SMART snapshots), shared by
+  CLI and GUI, with no raw serial numbers stored
 - `platter-cli` with JSON output and documented exit codes
 - `platter-gui` with INFO, SMART, SURFACE (Victoria-style latency map),
-  PARTITIONS and LOG tabs
+  BENCHMARK (HD Tune-style charts, history, run comparison), PARTITIONS and
+  LOG tabs
 
 ## Building
 
@@ -61,6 +67,7 @@ platter-cli devices info sda                # or: devices info 1   (Windows: Phy
 sudo platter-cli partitions list /dev/sdb
 sudo platter-cli smart show /dev/sda --json -o sda-smart.json
 sudo platter-cli surface scan /dev/sdb --csv sdb.csv --map
+sudo platter-cli benchmark read /dev/sdb --test curve --chart --save
 platter-cli partitions list disk.img        # images need no privileges
 ```
 
@@ -84,5 +91,5 @@ docs/              architecture, safety model, CLI reference
 ## License
 
 To be decided by the author. Third-party: Qt 6 (LGPL v3), nlohmann/json (MIT),
-Catch2 (BSL-1.0, tests only); smartmontools (GPL v2) is invoked as an external
+SQLite (public domain; vendored copy in third_party/), Catch2 (BSL-1.0, tests only); smartmontools (GPL v2) is invoked as an external
 program and not linked.

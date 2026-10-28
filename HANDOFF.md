@@ -34,7 +34,8 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.3 Benchmarking — in progress.** Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
+Milestone: **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
@@ -95,7 +96,25 @@ disposable HDD / USB stick, with the important drive unplugged).
   `--history-db` for benchmark, surface scan and SMART. Saving is opt-in in
   the CLI; a failed save only warns. `parse_size` accepts K/M/G[iB].
 
-Remaining for v0.3: GUI BENCHMARK tab with graphs and history.
+- GUI BENCHMARK tab (`src/gui/tabs/benchmark_tab.*`) + `Chart` widget
+  (`src/gui/widgets/chart.*`: classic line / bar chart, navy series, grey
+  dashed comparison series, boxed legend, optional fixed X range). Settings
+  for every BenchConfig field (write tests listed but disabled "[v0.4]"),
+  Start / Stop (no pause), progress, headline, chart selector per kind
+  (throughput or IOPS vs time, speed vs position 0-100 %, by block size, by
+  QD, latency histogram collapsed to octaves), phase metrics table, caveats,
+  History sub-tab (load / delete) and Compare combo that overlays a saved
+  session of the same kind. Operations > Benchmark (F6).
+- GUI history: opens `HistoryStore::default_path()` (the SAME DB as the CLI,
+  verified both directions). Settings > Record History (QSettings
+  `history/record`, default on) records completed benchmarks, finished
+  (non-cancelled) surface scans and every SMART query. If the DB can't be
+  opened the GUI logs a warning and history features disable themselves.
+- Dev aids: `--bench-kind N --start-bench --compare ID --shot-delay MS`.
+
+v0.3 open items: write benchmarks (spec 7.2, need the v0.4 destructive
+pipeline); SMART health-history graphs (data is now recorded; spec 5.4 graphs
+belong with v0.7); real-hardware validation.
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->

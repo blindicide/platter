@@ -27,6 +27,7 @@
 
 #include "../widgets/surface_map.hpp"
 #include "platter/reports/scan_report.hpp"
+#include "platter/storage/history.hpp"
 
 namespace platter::gui {
 namespace {
@@ -512,6 +513,13 @@ void SurfaceTab::finishScan() {
     status_->setText(summary);
     const Severity sev = st == OperationState::failed || s.failed ? Severity::warning : Severity::info;
     emit logEvent(sev, tr("Surface scan finished: %1").arg(summary), target_path_);
+    // Cancelled scans are partial by the user's choice; keep history to finished ones.
+    if (history_ && record_ && st != OperationState::cancelled) {
+        if (auto id = history_->record_scan(*view_); !id)
+            emit logEvent(Severity::warning,
+                          tr("Scan not saved to history: %1").arg(QString::fromStdString(id.error().describe())),
+                          target_path_);
+    }
     scan_.reset();
     updateButtons();
 }

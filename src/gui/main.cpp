@@ -3,8 +3,10 @@
 #include <QCommandLineParser>
 #include <QScreen>
 #include <QTimer>
+#include <algorithm>
 
 #include "mainwindow/main_window.hpp"
+#include "tabs/benchmark_tab.hpp"
 #include "tabs/surface_tab.hpp"
 #include "platter/version.hpp"
 #include "styles/classic_theme.hpp"
@@ -33,7 +35,15 @@ int main(int argc, char** argv) {
     QCommandLineOption open_scan({QStringLiteral("open-scan")}, QStringLiteral("Open a saved surface scan (JSON)."),
                                  QStringLiteral("file"));
     QCommandLineOption start_scan({QStringLiteral("start-scan")}, QStringLiteral("Start a surface scan on the selection."));
-    cli.addOptions({sector, shot, tab, size, select, smart_now, open_scan, start_scan});
+    QCommandLineOption bench_kind({QStringLiteral("bench-kind")}, QStringLiteral("Benchmark kind index (0-5)."),
+                                  QStringLiteral("n"));
+    QCommandLineOption start_bench({QStringLiteral("start-bench")}, QStringLiteral("Start a benchmark on the selection."));
+    QCommandLineOption shot_delay({QStringLiteral("shot-delay")}, QStringLiteral("Screenshot delay in ms."),
+                                  QStringLiteral("ms"), QStringLiteral("1500"));
+    QCommandLineOption compare({QStringLiteral("compare")}, QStringLiteral("Compare with saved benchmark #id."),
+                               QStringLiteral("id"));
+    cli.addOptions({sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+                    compare});
     cli.process(app);
 
     platter::gui::MainWindow w;
@@ -44,6 +54,8 @@ int main(int argc, char** argv) {
     if (cli.isSet(smart_now)) w.querySmartNow();
     if (cli.isSet(open_scan)) w.surfaceTab()->openScanFile(cli.value(open_scan));
     if (cli.isSet(start_scan)) w.surfaceTab()->startScan();
+    if (cli.isSet(bench_kind)) w.benchmarkTab()->selectKind(cli.value(bench_kind).toInt());
+    if (cli.isSet(start_bench)) w.benchmarkTab()->startBenchmark();
     if (cli.isSet(size)) {
         const auto parts = cli.value(size).split(QLatin1Char('x'));
         if (parts.size() == 2) w.resize(parts[0].toInt(), parts[1].toInt());
@@ -52,7 +64,12 @@ int main(int argc, char** argv) {
 
     if (cli.isSet(shot)) {
         const auto file = cli.value(shot);
-        QTimer::singleShot(1500, &w, [&w, file] {
+        if (cli.isSet(compare)) {
+            const auto id = cli.value(compare).toLongLong();
+            QTimer::singleShot(std::max(0, cli.value(shot_delay).toInt() - 500), &w,
+                               [&w, id] { w.benchmarkTab()->selectCompare(id); });
+        }
+        QTimer::singleShot(cli.value(shot_delay).toInt(), &w, [&w, file] {
             w.grab().save(file);
             QApplication::quit();
         });

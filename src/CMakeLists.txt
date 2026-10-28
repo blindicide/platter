@@ -92,18 +92,23 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/partition_bar.cpp
         gui/tabs/tabs.cpp
         gui/tabs/surface_tab.cpp
+        gui/tabs/benchmark_tab.cpp
         gui/widgets/surface_map.cpp
+        gui/widgets/chart.cpp
         gui/mainwindow/main_window.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
         gui/widgets/partition_bar.hpp
         gui/tabs/tabs.hpp
         gui/tabs/surface_tab.hpp
+        gui/tabs/benchmark_tab.hpp
         gui/widgets/surface_map.hpp
+        gui/widgets/chart.hpp
         gui/mainwindow/main_window.hpp
     )
     target_link_libraries(platter-gui PRIVATE
-        Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-reports)
+        Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
+        platter-reports platter-storage)
     platter_set_warnings(platter-gui)
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

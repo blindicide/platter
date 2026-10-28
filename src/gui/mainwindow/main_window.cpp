@@ -25,6 +25,7 @@
 #include <QThread>
 #include <QToolBar>
 
+#include "../tabs/benchmark_tab.hpp"
 #include "../tabs/surface_tab.hpp"
 #include "../tabs/tabs.hpp"
 #include "../widgets/log_model.hpp"
@@ -33,6 +34,7 @@
 #include "platter/platform/enumerate.hpp"
 #include "platter/platform/privileges.hpp"
 #include "platter/reports/json.hpp"
+#include "platter/storage/history.hpp"
 #include "platter/version.hpp"
 
 namespace platter::gui {
@@ -76,10 +78,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), log_(new LogModel
 
     log_->add(Severity::info, tr("platter %1 started (%2 privileges, read-only mode)")
                                   .arg(QString::fromLatin1(kVersion), qs(privilege_label())));
+    openHistory();
     refreshDevices();
 }
 
 MainWindow::~MainWindow() {
+    // Tabs may still reference the store while stopping their workers.
+    if (surface_tab_) surface_tab_->stopAndWait();
+    if (bench_tab_) bench_tab_->stopAndWait();
     for (auto& t : workers())
         if (t) t->wait();
 }
@@ -142,6 +148,21 @@ void MainWindow::buildActions() {
     act_surface_->setStatusTip(tr("Read-only surface scan with a latency map"));
     connect(act_surface_, &QAction::triggered, this, [this] { selectTab(QStringLiteral("SURFACE")); });
 
+    act_benchmark_ = new QAction(st->standardIcon(QStyle::SP_ComputerIcon), tr("&Benchmark..."), this);
+    act_benchmark_->setShortcut(QKeySequence(QStringLiteral("F6")));
+    act_benchmark_->setStatusTip(tr("Read benchmarks: sequential, random, access time, speed curve, sweeps"));
+    connect(act_benchmark_, &QAction::triggered, this, [this] { selectTab(QStringLiteral("BENCHMARK")); });
+
+    act_record_ = new QAction(tr("&Record History"), this);
+    act_record_->setCheckable(true);
+    act_record_->setStatusTip(tr("Save finished benchmarks, scans and SMART queries to the local history database"));
+    connect(act_record_, &QAction::toggled, this, [this](bool on) {
+        record_history_ = on;
+        QSettings().setValue(QStringLiteral("history/record"), on);
+        if (bench_tab_) bench_tab_->setHistory(history_.get(), on);
+        if (surface_tab_) surface_tab_->setHistory(history_.get(), on);
+    });
+
     act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
     act_show_serials_->setCheckable(true);
     act_show_serials_->setStatusTip(tr("Serial numbers are masked on screen and omitted from reports by default"));
@@ -175,7 +196,7 @@ void MainWindow::buildMenus() {
 
     auto* ops = menuBar()->addMenu(tr("&Operations"));
     ops->addAction(act_surface_);
-    ops->addAction(planned(tr("&Benchmark..."), QStringLiteral("v0.3")));
+    ops->addAction(act_benchmark_);
     ops->addAction(planned(tr("&Partition Manager..."), QStringLiteral("v0.5")));
     ops->addSeparator();
     ops->addAction(planned(tr("&Erase Device..."), QStringLiteral("v0.4")));
@@ -191,6 +212,7 @@ void MainWindow::buildMenus() {
 
     auto* settings = menuBar()->addMenu(tr("&Settings"));
     settings->addAction(act_show_serials_);
+    settings->addAction(act_record_);
     settings->addSeparator();
     for (const auto& name : {tr("&General..."), tr("&Interface..."), tr("&Performance..."), tr("I/&O..."),
                              tr("&Logging..."), tr("&Advanced...")})
@@ -228,6 +250,7 @@ void MainWindow::buildToolBar() {
     tb->addAction(act_smart_);
     tb->addAction(act_partitions_);
     tb->addAction(act_surface_);
+    tb->addAction(act_benchmark_);
     tb->addSeparator();
     tb->addAction(act_save_report_);
 }
@@ -278,11 +301,10 @@ void MainWindow::buildCentral() {
     tabs_->addTab(surface_tab_, tr("SURFACE"));
     connect(surface_tab_, &SurfaceTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
-    tabs_->addTab(new PlannedTab(tr("Benchmark"), QStringLiteral("v0.3"),
-                                 tr("Sequential and random read benchmarks, access time, full-disk speed curve "
-                                    "and queue-depth testing."),
-                                 tabs_),
-                  tr("BENCHMARK"));
+    bench_tab_ = new BenchmarkTab(tabs_);
+    tabs_->addTab(bench_tab_, tr("BENCHMARK"));
+    connect(bench_tab_, &BenchmarkTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(part_tab_, tr("PARTITIONS"));
     tabs_->addTab(new PlannedTab(tr("Erase"), QStringLiteral("v0.4"),
                                  tr("Zero / pattern / random overwrite with verification, ATA Secure Erase and "
@@ -345,6 +367,24 @@ void MainWindow::buildStatusBar() {
     statusBar()->setSizeGripEnabled(true);
 }
 
+void MainWindow::openHistory() {
+    // Same database as platter-cli, so sessions saved by either appear in both.
+    const auto path = storage::HistoryStore::default_path();
+    auto store = storage::HistoryStore::open(path);
+    if (!store) {
+        log_->add(Severity::warning,
+                  tr("History database unavailable (%1); results will not be saved").arg(qs(store.error().describe())));
+    } else {
+        history_ = std::move(store).value();
+        log_->add(Severity::debug, tr("History database: %1").arg(QString::fromStdString(path)));
+    }
+    record_history_ = QSettings().value(QStringLiteral("history/record"), true).toBool();
+    act_record_->setChecked(record_history_);
+    act_record_->setEnabled(history_ != nullptr);
+    bench_tab_->setHistory(history_.get(), record_history_);
+    surface_tab_->setHistory(history_.get(), record_history_);
+}
+
 void MainWindow::restoreSettings() {
     QSettings s;
     if (!restoreGeometry(s.value(QStringLiteral("window/geometry")).toByteArray())) resize(980, 680);
@@ -355,15 +395,16 @@ void MainWindow::restoreSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (surface_tab_->isRunning()) {
-        const auto answer = QMessageBox::question(this, tr("Surface Scan Running"),
-                                                  tr("A surface scan is still running. Stop it and exit?"),
+    if (surface_tab_->isRunning() || bench_tab_->isRunning()) {
+        const auto answer = QMessageBox::question(this, tr("Operation Running"),
+                                                  tr("A surface scan or benchmark is still running. Stop it and exit?"),
                                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (answer != QMessageBox::Yes) {
             e->ignore();
             return;
         }
         surface_tab_->stopAndWait();
+        bench_tab_->stopAndWait();
     }
     QSettings s;
     s.setValue(QStringLiteral("window/geometry"), saveGeometry());
@@ -484,6 +525,7 @@ void MainWindow::showCurrent() {
     part_tab_->setDevice(e);
     part_tab_->setBusy(busy_parts_);
     surface_tab_->setDevice(e);
+    bench_tab_->setDevice(e);
     updateSummary();
     const bool has = e != nullptr;
     act_save_report_->setEnabled(has);
@@ -572,6 +614,11 @@ void MainWindow::querySmart() {
                                                                                       : Severity::info;
                     self->log_->add(sev, tr("SMART health: %1").arg(qs(smart::health_name(entry.health->status))),
                                     qs(path));
+                    if (self->history_ && self->record_history_) {
+                        if (auto id = self->history_->record_smart(entry.info, *entry.smart, *entry.health); !id)
+                            self->log_->add(Severity::warning,
+                                            tr("SMART snapshot not saved: %1").arg(qs(id.error().describe())), qs(path));
+                    }
                 }
                 self->showCurrent();
             },

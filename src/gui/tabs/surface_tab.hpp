@@ -19,6 +19,10 @@ class QPushButton;
 class QSpinBox;
 class QTimer;
 
+namespace platter::storage {
+class HistoryStore;
+}
+
 namespace platter::gui {
 
 class SurfaceMap;
@@ -34,6 +38,10 @@ public:
     ~SurfaceTab() override;
 
     void setDevice(const DeviceEntry* e);
+    void setHistory(storage::HistoryStore* store, bool record) {
+        history_ = store;
+        record_ = record;
+    }
     bool isRunning() const;
     void stopAndWait();
 
@@ -73,6 +81,9 @@ private:
     bool target_is_image_ = false;
     std::uint32_t target_sector_ = 512;
     std::uint64_t target_lbas_ = 0;
+
+    storage::HistoryStore* history_ = nullptr;
+    bool record_ = true;
 
     // State
     std::unique_ptr<surface::SurfaceScan> scan_;

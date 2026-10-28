@@ -60,12 +60,20 @@ Done:
 - **29 test cases / 239 assertions passing** (range math, CRC, image device,
   GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs).
 
+- Win32 backend (`src/platform/windows/`): `Win32FileDevice` (ReadFile/WriteFile
+  with OVERLAPPED offsets, 1 GiB chunking, EOF -> short_transfer), PhysicalDrive
+  enumeration with **zero-access handles** (StorageDeviceProperty, geometry,
+  alignment, seek penalty, TRIM, IS_WRITABLE, device-id VPD -> wwn-/eui. stable
+  id), volume -> disk mapping via IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, system
+  disk = disk hosting the Windows directory. **Compile-checked only** (MinGW,
+  warning-free); never executed. First real run must be by the owner.
+  Cross-compile: `cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake -DPLATTER_BUILD_TESTS=OFF -DPLATTER_BUILD_GUI=OFF`
+
 Next up (in order):
-1. Win32 backend (compile-checked here with MinGW; MSVC in CI).
-2. smartctl JSON adapter + conservative health assessment.
-3. `platter-cli`: `devices list|info`, `partitions list`, `smart show`, `--json`.
-4. Qt GUI skeleton with classic theme.
-5. GitHub Actions CI, docs (architecture, safety, cli-reference).
+1. smartctl JSON adapter + conservative health assessment.
+2. `platter-cli`: `devices list|info`, `partitions list`, `smart show`, `--json`.
+3. Qt GUI skeleton with classic theme.
+4. GitHub Actions CI, docs (architecture, safety, cli-reference).
 
 ## 3. Layout
 
@@ -117,7 +125,11 @@ Test helpers in `tests/support/` can synthesize GPT (`write_gpt`) and MBR+EBR
 
 ## 7. Known gaps / TODO
 
-- `open_device()` exists on Linux only; Windows backend pending.
+- Windows: system-disk detection only checks the volume holding the Windows
+  directory; the EFI/boot partition's disk is not yet flagged (TODO v0.8).
+- Windows: exclusive access to physical disks needs FSCTL_LOCK_VOLUME +
+  FSCTL_DISMOUNT_VOLUME per volume (destructive pipeline, v0.4).
+- Windows unit tests have never run (no Wine here); CI will be first.
 - nlohmann_json FetchContent download has no pinned URL_HASH yet.
 - Partition table type is not filled into `DeviceInfo::partition_table` during
   enumeration (that needs a read; enumeration is metadata-only by design).

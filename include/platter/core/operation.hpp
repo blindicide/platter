@@ -120,8 +120,10 @@ public:
     Status validate();
     // READY -> RUNNING on a worker thread. Returns immediately.
     Status start();
+    // Ignored for operations whose results pausing would invalidate (benchmarks).
     void pause();
     void resume();
+    virtual bool supports_pause() const noexcept { return true; }
     void cancel();
     // Blocks until the worker has finished (terminal state).
     void wait();

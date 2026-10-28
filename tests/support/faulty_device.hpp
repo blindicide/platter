@@ -34,6 +34,8 @@ public:
     std::uint64_t remove_after_reads = 0;
     // Called after every read with the running read count.
     std::function<void(std::uint64_t)> after_read;
+    // Called before every read with (offset, length). Must be thread-safe.
+    std::function<void(std::uint64_t, std::size_t)> on_read;
 
     std::uint64_t reads() const noexcept { return reads_.load(); }
 
@@ -47,6 +49,7 @@ public:
 
     Result<IOResult> read(std::uint64_t offset, void* buffer, std::size_t length) override {
         const auto n = ++reads_;
+        if (on_read) on_read(offset, length);
         if (real_delay.count() > 0) std::this_thread::sleep_for(real_delay);
         auto finish = [&](Result<IOResult> r) {
             if (after_read) after_read(n);

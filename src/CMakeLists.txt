@@ -5,6 +5,7 @@ add_library(platter-core STATIC
     core/device.cpp
     core/bytes.cpp
     core/operation.cpp
+    core/histogram.cpp
     platform/image/image_info.cpp
     platform/privileges.cpp
 )
@@ -53,6 +54,11 @@ target_link_libraries(platter-surface PUBLIC platter-core)
 find_package(Threads REQUIRED)
 target_link_libraries(platter-core PUBLIC Threads::Threads)
 platter_set_warnings(platter-surface)
+
+# ----------------------------------------------------------- platter-benchmark
+add_library(platter-benchmark STATIC benchmark/benchmark.cpp)
+target_link_libraries(platter-benchmark PUBLIC platter-core)
+platter_set_warnings(platter-benchmark)
 
 # ------------------------------------------------------------- platter-reports
 add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp)

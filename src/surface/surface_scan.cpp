@@ -10,6 +10,7 @@
 #include <numeric>
 
 #include "platter/core/range.hpp"
+#include "platter/core/rng.hpp"
 
 namespace platter::surface {
 
@@ -56,70 +57,7 @@ LatencyClass classify(std::uint64_t duration_ns, const Thresholds& t) noexcept {
     return LatencyClass::very_slow;
 }
 
-// ------------------------------------------------------------ histogram
-
-int LatencyHistogram::bucket_of(std::uint64_t us) {
-    if (us < kSub) return static_cast<int>(us);
-    const int msb = 63 - std::countl_zero(us);
-    const int shift = msb - 4;
-    const int sub = static_cast<int>((us >> shift) & (kSub - 1));
-    return (msb - 3) * kSub + sub;
-}
-
-std::uint64_t LatencyHistogram::bucket_upper(int b) {
-    if (b < kSub) return static_cast<std::uint64_t>(b);
-    const int group = b / kSub, sub = b % kSub;
-    const int shift = group + 3 - 4;
-    const std::uint64_t lower = (static_cast<std::uint64_t>(kSub + sub)) << shift;
-    return lower + ((std::uint64_t{1} << shift) - 1);
-}
-
-void LatencyHistogram::add(std::uint64_t us) {
-    ++b_[static_cast<std::size_t>(bucket_of(us))];
-    ++count_;
-    sum_ += us;
-    min_ = std::min(min_, us);
-    max_ = std::max(max_, us);
-}
-
-std::uint64_t LatencyHistogram::percentile(double p) const {
-    if (count_ == 0) return 0;
-    p = std::clamp(p, 0.0, 100.0);
-    auto target = static_cast<std::uint64_t>(std::ceil(p / 100.0 * static_cast<double>(count_)));
-    target = std::max<std::uint64_t>(target, 1);
-    std::uint64_t seen = 0;
-    for (int i = 0; i < kBuckets; ++i) {
-        seen += b_[static_cast<std::size_t>(i)];
-        if (seen >= target) return std::clamp(bucket_upper(i), min(), max_);
-    }
-    return max_;
-}
-
 // ------------------------------------------------------------ order
-
-namespace {
-
-// splitmix64: tiny, fast, and identical on every platform (unlike the
-// std:: distributions, whose output is implementation-defined).
-struct SplitMix64 {
-    std::uint64_t s;
-    std::uint64_t next() {
-        std::uint64_t z = (s += 0x9E3779B97F4A7C15ull);
-        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-        return z ^ (z >> 31);
-    }
-    // Unbiased value in [0, bound).
-    std::uint64_t below(std::uint64_t bound) {
-        const std::uint64_t limit = UINT64_MAX - UINT64_MAX % bound;
-        std::uint64_t v;
-        do v = next();
-        while (v >= limit);
-        return v % bound;
-    }
-};
-
-}  // namespace
 
 std::vector<std::uint64_t> make_order(std::uint64_t n, ScanOrder order, double sample_percent, std::uint64_t seed) {
     std::vector<std::uint64_t> v(static_cast<std::size_t>(n));

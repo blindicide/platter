@@ -140,6 +140,7 @@ void Operation::worker() {
 }
 
 void Operation::pause() {
+    if (!supports_pause()) return;
     std::lock_guard lk(m_);
     if (state_ != OperationState::running) return;
     control_.request_pause();

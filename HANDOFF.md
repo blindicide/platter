@@ -34,10 +34,41 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
+Milestone: **v0.3 Benchmarking — in progress.** Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.3 so far
+- Owner chose to skip the real-hardware run for v0.2 for now and move on.
+- SQLite: system library when found (`PLATTER_SYSTEM_SQLITE`, default ON),
+  otherwise the vendored amalgamation in `third_party/sqlite3` (3.53.4,
+  public domain; provenance + SHA-256 in third_party/sqlite3/README.md:
+  extracted from npm `better-sqlite3@13.0.3` because sqlite.org is not
+  reachable from the agent sandbox). Target name is `SQLite::SQLite3` either way.
+- `LatencyHistogram` moved to `include/platter/core/histogram.hpp` (+ `merge()`,
+  `buckets()`); surface keeps a `using` alias. Seeded RNG shared in
+  `include/platter/core/rng.hpp` (splitmix64).
+- `Operation::supports_pause()` (virtual, default true); benchmarks return false.
+- Benchmark engine (`include/platter/benchmark/benchmark.hpp`, `platter-benchmark`):
+  kinds sequential / random / access_time / speed_curve / block_sizes /
+  queue_depths. Throughput = bytes / phase wall time; latency = per-request OS
+  call time; QD N = N threads each with their OWN handle (Windows serializes
+  I/O on one synchronous handle) issuing synchronous reads. Per-kind defaults
+  (`with_defaults`): seq 1 MiB x up to 1 GiB / 30 s; random 4 KiB / 10 s;
+  access = 1 sector QD1 / 5 s; curve 100 points x 16 MiB; sweeps 3 s or
+  256 MiB per step (block-size steps start at different offsets so the drive
+  cache can't serve them). Results: phases with Metrics (MB/s, MiB/s, IOPS,
+  min/mean/median/p95/p99/max latency, errors), throughput-vs-time timeline
+  (250 ms samples), throughput-vs-position samples, merged latency buckets,
+  spec 7.4 caveats (image file, buffered I/O, small test size, small random
+  region). Read errors counted (abort after 64); vanished device -> FAILED.
+  Read-only handles enforced at validation AND in every worker.
+- 14 benchmark test cases (stress-run randomized x15 and pinned to 1 CPU x8,
+  no flakes). Full suite ~2.7 s.
+
+Remaining for v0.3: benchmark JSON/text reports, SQLite history store,
+CLI `benchmark`, GUI BENCHMARK tab with graphs and history.
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->

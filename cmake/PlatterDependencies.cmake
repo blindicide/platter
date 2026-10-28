@@ -31,3 +31,13 @@ if(PLATTER_BUILD_GUI)
         set(PLATTER_BUILD_GUI OFF CACHE BOOL "" FORCE)
     endif()
 endif()
+
+# SQLite: system library when available (Linux), vendored amalgamation otherwise.
+option(PLATTER_SYSTEM_SQLITE "Prefer the system SQLite 3 library" ON)
+if(PLATTER_SYSTEM_SQLITE)
+    find_package(SQLite3 QUIET)
+endif()
+if(NOT TARGET SQLite::SQLite3)
+    message(STATUS "Using vendored SQLite amalgamation (third_party/sqlite3)")
+    add_subdirectory(${PROJECT_SOURCE_DIR}/third_party ${PROJECT_BINARY_DIR}/third_party)
+endif()

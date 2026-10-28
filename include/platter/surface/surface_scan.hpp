@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "platter/core/block_device.hpp"
+#include "platter/core/histogram.hpp"
 #include "platter/core/operation.hpp"
 
 namespace platter::surface {
@@ -79,25 +80,8 @@ struct BlockResult {
     LatencyClass cls = LatencyClass::untested;
 };
 
-// Streaming latency histogram (log2 buckets, 16 sub-buckets each: ~6 % error).
-class LatencyHistogram {
-public:
-    void add(std::uint64_t us);
-    std::uint64_t count() const noexcept { return count_; }
-    std::uint64_t min() const noexcept { return count_ ? min_ : 0; }
-    std::uint64_t max() const noexcept { return max_; }
-    double mean() const noexcept { return count_ ? static_cast<double>(sum_) / static_cast<double>(count_) : 0; }
-    // p in [0,100]. Returns an upper-bound estimate within one bucket.
-    std::uint64_t percentile(double p) const;
-
-private:
-    static constexpr int kSub = 16;
-    static constexpr int kBuckets = 64 * kSub;
-    static int bucket_of(std::uint64_t us);
-    static std::uint64_t bucket_upper(int b);
-    std::array<std::uint64_t, kBuckets> b_{};
-    std::uint64_t count_ = 0, sum_ = 0, min_ = UINT64_MAX, max_ = 0;
-};
+// Shared with benchmarks; see platter/core/histogram.hpp.
+using LatencyHistogram = platter::LatencyHistogram;
 
 struct ScanStats {
     std::uint64_t total_bytes = 0;       // bytes in the configured range (or sample)

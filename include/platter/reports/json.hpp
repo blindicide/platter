@@ -30,4 +30,7 @@ nlohmann::json envelope(const char* kind);
 // disambiguation on screen); empty stays empty.
 std::string mask_serial(const std::string& serial);
 
+// The device's stable id with any embedded serial masked unless `p` allows it.
+std::string redact_stable_id(const DeviceInfo& d, const Privacy& p);
+
 }  // namespace platter::reports

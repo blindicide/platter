@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: TBD
+//
+// Persistent operation history in SQLite (spec §14.2): benchmark sessions,
+// surface scans and SMART snapshots, keyed by device.
+//
+// Privacy: the database never stores a raw serial number. Devices are keyed by
+// their stable id when available, otherwise by a SHA-256 hash of model+serial;
+// stored JSON documents are written with serials omitted.
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "platter/benchmark/benchmark.hpp"
+#include "platter/core/error.hpp"
+#include "platter/smart/smart.hpp"
+#include "platter/surface/surface_scan.hpp"
+
+namespace platter::storage {
+
+enum class SessionKind : std::uint8_t { benchmark, surface_scan, smart };
+std::string_view session_kind_name(SessionKind k) noexcept;
+
+struct SessionSummary {
+    std::int64_t id = 0;
+    SessionKind kind = SessionKind::benchmark;
+    std::string subtype;        // benchmark kind ("sequential", ...), "READ", or SMART health
+    std::string device_key;
+    std::string device_model;
+    std::string started_utc;
+    std::string state;          // OperationState name, or health for SMART
+    std::string headline;       // e.g. "512.3 MB/s", "3 failed of 4800", "WARNING"
+    double primary_value = 0;   // the number to plot over time
+};
+
+struct DeviceRecord {
+    std::int64_t id = 0;
+    std::string key;
+    std::string model;
+    std::uint64_t capacity_bytes = 0;
+    std::string first_seen_utc;
+    std::string last_seen_utc;
+};
+
+class HistoryStore {
+public:
+    ~HistoryStore();
+    HistoryStore(const HistoryStore&) = delete;
+    HistoryStore& operator=(const HistoryStore&) = delete;
+
+    // Opens (creating if needed, including parent directories) and migrates.
+    static Result<std::unique_ptr<HistoryStore>> open(const std::string& path);
+    // $PLATTER_HISTORY_DB, else <data dir>/platter/history.db
+    // (%APPDATA% on Windows, $XDG_DATA_HOME or ~/.local/share elsewhere).
+    static std::string default_path();
+    // Stable identity for history purposes; never contains a raw serial.
+    static std::string device_key(const DeviceInfo& d);
+
+    static constexpr int kSchemaVersion = 1;
+    int schema_version() const noexcept { return version_; }
+    const std::string& path() const noexcept { return path_; }
+
+    Result<std::int64_t> record_benchmark(const bench::BenchResult& r);
+    Result<std::int64_t> record_scan(const surface::ScanSnapshot& s);
+    Result<std::int64_t> record_smart(const DeviceInfo& d, const smart::Report& r, const smart::Assessment& a);
+
+    // Newest first. Empty device_key = all devices.
+    Result<std::vector<SessionSummary>> list(SessionKind kind, const std::string& device_key = {}, int limit = 200);
+    Result<std::vector<DeviceRecord>> devices();
+
+    Result<bench::BenchResult> load_benchmark(std::int64_t id);
+    Result<surface::ScanSnapshot> load_scan(std::int64_t id);
+    Result<std::string> load_smart_json(std::int64_t id);
+
+    Status remove(SessionKind kind, std::int64_t id);
+
+private:
+    HistoryStore() = default;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+    std::string path_;
+    int version_ = 0;
+};
+
+}  // namespace platter::storage

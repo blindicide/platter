@@ -45,6 +45,17 @@ json envelope(const char* kind) {
     return {{"tool", kProjectName}, {"version", kVersion}, {"schema", 1}, {"kind", kind}, {"generated_utc", ts}};
 }
 
+// by-id style stable ids ("ata-MODEL_SERIAL", "usb-..._SERIAL-0:0") can embed
+// the serial number; mask it there too unless serials were requested.
+std::string redact_stable_id(const DeviceInfo& d, const Privacy& p) {
+    if (p.include_serials || d.serial.empty()) return d.stable_id;
+    std::string id = d.stable_id;
+    const std::string masked = mask_serial(d.serial);
+    for (std::size_t pos = id.find(d.serial); pos != std::string::npos; pos = id.find(d.serial, pos + masked.size()))
+        id.replace(pos, d.serial.size(), masked);
+    return id;
+}
+
 json to_json(const DeviceInfo& d, const Privacy& p) {
     json caps = json::array();
     for (auto n : d.capabilities.names()) caps.push_back(std::string(n));
@@ -54,7 +65,7 @@ json to_json(const DeviceInfo& d, const Privacy& p) {
         {"vendor", d.vendor},
         {"model", d.model},
         {"firmware", d.firmware},
-        {"stable_id", d.stable_id},
+        {"stable_id", redact_stable_id(d, p)},
         {"capacity_bytes", d.capacity_bytes},
         {"logical_sector_size", d.logical_sector_size},
         {"physical_sector_size", d.physical_sector_size},

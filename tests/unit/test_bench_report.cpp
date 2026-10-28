@@ -84,3 +84,15 @@ TEST_CASE("benchmark text report records the settings", "[bench_report]") {
     CHECK(t.find(r.headline()) != std::string::npos);
     CHECK(t.find("SERIAL-0123456789") == std::string::npos);
 }
+
+TEST_CASE("serials embedded in by-id stable ids are masked in exports", "[bench_report][privacy]") {
+    DeviceInfo d;
+    d.serial = "WD-WCC6Y1234567";
+    d.stable_id = "ata-WDC_WD10EZEX-08W_WD-WCC6Y1234567";
+    const auto j = reports::to_json(d).dump();
+    CHECK(j.find("WD-WCC6Y1234567") == std::string::npos);
+    CHECK(reports::redact_stable_id(d, {}) == "ata-WDC_WD10EZEX-08W_WD-W***********");
+    CHECK(reports::redact_stable_id(d, {true}) == d.stable_id);
+    d.stable_id = "wwn-0x50014ee2b5a1c3d4";  // no serial inside: unchanged
+    CHECK(reports::redact_stable_id(d, {}) == d.stable_id);
+}

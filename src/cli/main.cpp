@@ -343,7 +343,7 @@ int cmd_devices_info(const Options& o, const std::string& target) {
     row("Model", d.model);
     row("Serial", o.show_serial ? d.serial : reports::mask_serial(d.serial));
     row("Firmware", d.firmware);
-    row("Stable ID", d.stable_id);
+    row("Stable ID", reports::redact_stable_id(d, {o.show_serial}));
     row("Capacity", format_capacity(d.capacity_bytes));
     row("Total LBAs", std::to_string(d.total_lbas()));
     row("Sector size", std::to_string(d.logical_sector_size) + " logical / " +

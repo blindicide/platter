@@ -117,7 +117,7 @@ void InfoTab::setDevice(const DeviceEntry* e, bool show_serial) {
     add(tr("Model"), qs(d.model));
     add(tr("Serial number"), show_serial ? qs(d.serial) : qs(reports::mask_serial(d.serial)));
     add(tr("Firmware revision"), qs(d.firmware));
-    add(tr("Stable identifier"), qs(d.stable_id));
+    add(tr("Stable identifier"), qs(reports::redact_stable_id(d, {show_serial})));
     add(tr("Capacity"), qs(format_capacity(d.capacity_bytes)));
     add(tr("Total LBAs"), QString::number(d.total_lbas()));
     add(tr("Logical sector size"), QString::number(d.logical_sector_size) + tr(" bytes"));

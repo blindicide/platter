@@ -67,6 +67,11 @@ target_link_libraries(platter-reports
     PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
+# ------------------------------------------------------------- platter-storage
+add_library(platter-storage STATIC storage/history.cpp)
+target_link_libraries(platter-storage PUBLIC platter-reports PRIVATE SQLite::SQLite3)
+platter_set_warnings(platter-storage)
+
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
     add_executable(platter-cli cli/main.cpp)

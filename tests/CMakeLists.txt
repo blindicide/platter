@@ -10,9 +10,10 @@ add_executable(platter-tests
     unit/test_scan_report.cpp
     unit/test_benchmark.cpp
     unit/test_bench_report.cpp
+    unit/test_history.cpp
 )
 target_include_directories(platter-tests PRIVATE support)
-target_link_libraries(platter-tests PRIVATE platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-reports Catch2::Catch2WithMain)
+target_link_libraries(platter-tests PRIVATE platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-reports platter-storage SQLite::SQLite3 Catch2::Catch2WithMain)
 target_compile_definitions(platter-tests PRIVATE
     PLATTER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 platter_set_warnings(platter-tests)

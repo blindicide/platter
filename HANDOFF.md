@@ -76,8 +76,21 @@ disposable HDD / USB stick, with the important drive unplugged).
 - **Agents: build locally with `-DPLATTER_WERROR=ON`.** CI uses -Werror and a
   -Wshadow in test code slipped through a non-Werror local build once.
 
-Remaining for v0.3: SQLite history store, CLI `benchmark`, GUI BENCHMARK tab
-with graphs and history.
+- History store (`include/platter/storage/history.hpp`, `platter-storage`):
+  SQLite, schema v1 (`meta` with schema_version, `devices`, `sessions` with
+  kind benchmark / surface-scan / smart, summary columns + full JSON document,
+  ON DELETE CASCADE). Migrations run in a transaction; a DB with a NEWER
+  schema is refused (`unsupported`), a non-database file -> `corrupt_data`.
+  WAL mode, busy timeout 3 s. Default path: $PLATTER_HISTORY_DB, else
+  %APPDATA%\platter\history.db / $XDG_DATA_HOME or ~/.local/share/platter/history.db.
+  **Privacy:** device keys are `id:`+sha256(stable_id)[:24] / `sn:`+sha256(model|serial)
+  / `image:name:capacity`; documents stored with serials omitted. A test
+  greps the raw DB bytes for the serial.
+- Privacy fix (all exports + CLI/GUI display): Linux by-id stable ids such as
+  `ata-MODEL_SERIAL` embed the serial; `reports::redact_stable_id()` masks it
+  unless serials were requested.
+
+Remaining for v0.3: CLI `benchmark`, GUI BENCHMARK tab with graphs and history.
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->
@@ -105,7 +118,7 @@ with graphs and history.
   with no retries. Durations come from `IOResult::duration_ns` on success.
 - Test double `tests/support/faulty_device.hpp`: bad LBAs, flaky LBAs (fail N
   then recover), fake per-LBA latency, real delay, simulated removal.
-- **72 test cases / 1009 assertions passing**; operation/surface tests were
+- (v0.2 at the time: 72 test cases / 1009 assertions); operation/surface tests were
   stress-run 25x randomized and pinned to one CPU with no flakes.
 
 - Scan export/import (`include/platter/reports/scan_report.hpp`, in

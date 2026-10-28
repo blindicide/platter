@@ -1,0 +1,694 @@
+// SPDX-License-Identifier: TBD
+#include "main_window.hpp"
+
+#include <QAction>
+#include <QApplication>
+#include <QBoxLayout>
+#include <QCloseEvent>
+#include <QComboBox>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHeaderView>
+#include <QLabel>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPointer>
+#include <QSettings>
+#include <QSplitter>
+#include <QStatusBar>
+#include <QStyle>
+#include <QTabWidget>
+#include <QTableView>
+#include <QThread>
+#include <QToolBar>
+
+#include "../tabs/tabs.hpp"
+#include "../widgets/log_model.hpp"
+#include "../widgets/table_tools.hpp"
+#include "platter/core/block_device.hpp"
+#include "platter/platform/enumerate.hpp"
+#include "platter/platform/privileges.hpp"
+#include "platter/reports/json.hpp"
+#include "platter/version.hpp"
+
+namespace platter::gui {
+namespace {
+
+QString qs(const std::string& s) { return QString::fromStdString(s); }
+QString qs(std::string_view s) { return QString::fromUtf8(s.data(), static_cast<int>(s.size())); }
+
+QLabel* value_label(QWidget* parent) {
+    auto* l = new QLabel(QStringLiteral("-"), parent);
+    l->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    l->setMinimumWidth(60);
+    return l;
+}
+
+// Every running worker thread, so the window can wait for them on shutdown.
+std::vector<QPointer<QThread>>& workers() {
+    static std::vector<QPointer<QThread>> w;
+    return w;
+}
+
+template <typename Fn>
+void run_worker(QObject* owner, Fn&& fn) {
+    QThread* t = QThread::create(std::forward<Fn>(fn));
+    QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
+    workers().emplace_back(t);
+    Q_UNUSED(owner);
+    t->start();
+}
+
+}  // namespace
+
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), log_(new LogModel(this)) {
+    setWindowTitle(QStringLiteral("platter %1 - Storage Operations Suite").arg(QString::fromLatin1(kVersion)));
+    buildActions();
+    buildMenus();
+    buildToolBar();
+    buildCentral();
+    buildStatusBar();
+    restoreSettings();
+
+    log_->add(Severity::info, tr("platter %1 started (%2 privileges, read-only mode)")
+                                  .arg(QString::fromLatin1(kVersion), qs(privilege_label())));
+    refreshDevices();
+}
+
+MainWindow::~MainWindow() {
+    for (auto& t : workers())
+        if (t) t->wait();
+}
+
+// ------------------------------------------------------------------ actions
+
+QAction* MainWindow::planned(const QString& text, const QString& milestone) {
+    auto* a = new QAction(text, this);
+    a->setEnabled(false);
+    a->setStatusTip(tr("Planned for %1").arg(milestone));
+    a->setToolTip(tr("Planned for %1").arg(milestone));
+    return a;
+}
+
+void MainWindow::buildActions() {
+    auto* st = style();
+    act_open_image_ = new QAction(st->standardIcon(QStyle::SP_DialogOpenButton), tr("&Open Disk Image..."), this);
+    act_open_image_->setShortcut(QKeySequence::Open);
+    act_open_image_->setStatusTip(tr("Open a raw image file read-only"));
+    connect(act_open_image_, &QAction::triggered, this, &MainWindow::openImageDialog);
+
+    act_save_report_ = new QAction(st->standardIcon(QStyle::SP_DialogSaveButton), tr("&Save Report..."), this);
+    act_save_report_->setShortcut(QKeySequence::Save);
+    act_save_report_->setStatusTip(tr("Save a JSON report for the selected device"));
+    connect(act_save_report_, &QAction::triggered, this, &MainWindow::saveReport);
+
+    act_exit_ = new QAction(tr("E&xit"), this);
+    act_exit_->setShortcut(QKeySequence(QStringLiteral("Alt+F4")));
+    connect(act_exit_, &QAction::triggered, this, &QWidget::close);
+
+    act_refresh_ = new QAction(st->standardIcon(QStyle::SP_BrowserReload), tr("&Refresh Device List"), this);
+    act_refresh_->setShortcut(QKeySequence(QStringLiteral("F5")));
+    act_refresh_->setStatusTip(tr("Re-enumerate storage devices (metadata only)"));
+    connect(act_refresh_, &QAction::triggered, this, &MainWindow::refreshDevices);
+
+    act_identify_ = new QAction(st->standardIcon(QStyle::SP_DriveHDIcon), tr("&Identify Device"), this);
+    act_identify_->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
+    connect(act_identify_, &QAction::triggered, this, [this] { selectTab(QStringLiteral("INFO")); });
+
+    act_smart_ = new QAction(st->standardIcon(QStyle::SP_FileDialogInfoView), tr("&SMART Information"), this);
+    act_smart_->setShortcut(QKeySequence(QStringLiteral("F2")));
+    act_smart_->setStatusTip(tr("Query SMART / NVMe health via smartctl (read-only)"));
+    connect(act_smart_, &QAction::triggered, this, [this] {
+        selectTab(QStringLiteral("SMART"));
+        querySmart();
+    });
+
+    act_caps_ = new QAction(tr("Device &Capabilities"), this);
+    connect(act_caps_, &QAction::triggered, this, [this] { selectTab(QStringLiteral("INFO")); });
+
+    act_partitions_ = new QAction(st->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Read &Partition Table"), this);
+    act_partitions_->setShortcut(QKeySequence(QStringLiteral("F3")));
+    connect(act_partitions_, &QAction::triggered, this, [this] {
+        selectTab(QStringLiteral("PARTITIONS"));
+        readPartitions();
+    });
+
+    act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
+    act_show_serials_->setCheckable(true);
+    act_show_serials_->setStatusTip(tr("Serial numbers are masked on screen and omitted from reports by default"));
+    connect(act_show_serials_, &QAction::toggled, this, [this](bool on) {
+        show_serials_ = on;
+        showCurrent();
+    });
+
+    act_about_ = new QAction(tr("&About platter..."), this);
+    connect(act_about_, &QAction::triggered, this, &MainWindow::about);
+    act_license_ = new QAction(tr("&License Information..."), this);
+    connect(act_license_, &QAction::triggered, this, &MainWindow::licenseInfo);
+}
+
+void MainWindow::buildMenus() {
+    auto* file = menuBar()->addMenu(tr("&File"));
+    file->addAction(act_open_image_);
+    file->addAction(act_save_report_);
+    file->addAction(planned(tr("&Export Results..."), QStringLiteral("v0.2")));
+    file->addSeparator();
+    file->addAction(act_exit_);
+
+    auto* dev = menuBar()->addMenu(tr("&Device"));
+    dev->addAction(act_refresh_);
+    dev->addSeparator();
+    dev->addAction(act_identify_);
+    dev->addAction(act_smart_);
+    dev->addAction(act_caps_);
+    dev->addAction(act_partitions_);
+    dev->addAction(planned(tr("Re&scan Device"), QStringLiteral("v0.7")));
+
+    auto* ops = menuBar()->addMenu(tr("&Operations"));
+    ops->addAction(planned(tr("&Surface Test..."), QStringLiteral("v0.2")));
+    ops->addAction(planned(tr("&Benchmark..."), QStringLiteral("v0.3")));
+    ops->addAction(planned(tr("&Partition Manager..."), QStringLiteral("v0.5")));
+    ops->addSeparator();
+    ops->addAction(planned(tr("&Erase Device..."), QStringLiteral("v0.4")));
+    ops->addAction(planned(tr("&Clone Device..."), QStringLiteral("v0.6")));
+    ops->addAction(planned(tr("Create Disk &Image..."), QStringLiteral("v0.6")));
+
+    auto* tools = menuBar()->addMenu(tr("&Tools"));
+    tools->addAction(planned(tr("&Hex Sector Viewer"), QStringLiteral("v0.7")));
+    tools->addAction(planned(tr("&Checksum Calculator"), QStringLiteral("v0.6")));
+    tools->addAction(planned(tr("Image &Verification"), QStringLiteral("v0.6")));
+    tools->addAction(planned(tr("Drive &Qualification..."), QStringLiteral("v0.7")));
+    tools->addAction(planned(tr("Operation &History"), QStringLiteral("v0.7")));
+
+    auto* settings = menuBar()->addMenu(tr("&Settings"));
+    settings->addAction(act_show_serials_);
+    settings->addSeparator();
+    for (const auto& name : {tr("&General..."), tr("&Interface..."), tr("&Performance..."), tr("I/&O..."),
+                             tr("&Logging..."), tr("&Advanced...")})
+        settings->addAction(planned(name, QStringLiteral("v0.9")));
+
+    auto* help = menuBar()->addMenu(tr("&Help"));
+    help->addAction(planned(tr("&Documentation"), QStringLiteral("v0.9")));
+    help->addSeparator();
+    help->addAction(act_about_);
+    help->addAction(act_license_);
+}
+
+void MainWindow::buildToolBar() {
+    auto* tb = addToolBar(tr("Main"));
+    tb->setObjectName(QStringLiteral("mainToolBar"));
+    tb->setIconSize(QSize(16, 16));
+    tb->setMovable(false);
+    tb->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    tb->addAction(act_refresh_);
+    tb->addAction(act_open_image_);
+    tb->addSeparator();
+    tb->addWidget(new QLabel(tr(" Device: "), tb));
+    selector_ = new QComboBox(tb);
+    selector_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    selector_->setMinimumContentsLength(40);
+    selector_->setToolTip(tr("Select a device or image (Ctrl+D)"));
+    tb->addWidget(selector_);
+    auto* focus = new QAction(this);
+    focus->setShortcut(QKeySequence(QStringLiteral("Ctrl+D")));
+    connect(focus, &QAction::triggered, selector_, qOverload<>(&QWidget::setFocus));
+    addAction(focus);
+    connect(selector_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::onDeviceSelected);
+    tb->addSeparator();
+    tb->addAction(act_identify_);
+    tb->addAction(act_smart_);
+    tb->addAction(act_partitions_);
+    tb->addSeparator();
+    tb->addAction(act_save_report_);
+}
+
+void MainWindow::buildCentral() {
+    auto* central = new QWidget(this);
+    auto* col = new QVBoxLayout(central);
+    col->setContentsMargins(4, 4, 4, 0);
+    col->setSpacing(4);
+
+    // ---- device summary panel
+    auto* summary = new QGroupBox(tr("Device Summary"), central);
+    auto* grid = new QGridLayout(summary);
+    grid->setContentsMargins(6, 4, 6, 4);
+    grid->setHorizontalSpacing(8);
+    grid->setVerticalSpacing(2);
+    auto pair = [&](int r, int c, const QString& key, QLabel*& value) {
+        auto* k = new QLabel(key, summary);
+        k->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        grid->addWidget(k, r, c * 2);
+        value = value_label(summary);
+        grid->addWidget(value, r, c * 2 + 1);
+    };
+    pair(0, 0, tr("Model:"), sum_model_);
+    pair(0, 1, tr("Capacity:"), sum_capacity_);
+    pair(0, 2, tr("Temperature:"), sum_temp_);
+    pair(1, 0, tr("Interface:"), sum_iface_);
+    pair(1, 1, tr("Sectors:"), sum_geometry_);
+    pair(1, 2, tr("Health:"), sum_health_);
+    pair(2, 0, tr("Firmware:"), sum_firmware_);
+    pair(2, 1, tr("Usage:"), sum_usage_);
+    sum_health_->setObjectName(QStringLiteral("healthUnknown"));
+    for (int c : {1, 3, 5}) grid->setColumnStretch(c, 1);
+    col->addWidget(summary);
+
+    // ---- tabs + activity log
+    vsplit_ = new QSplitter(Qt::Vertical, central);
+    vsplit_->setChildrenCollapsible(false);
+    tabs_ = new QTabWidget(vsplit_);
+    tabs_->setDocumentMode(false);
+    info_tab_ = new InfoTab(tabs_);
+    smart_tab_ = new SmartTab(tabs_);
+    part_tab_ = new PartitionsTab(tabs_);
+    log_tab_ = new LogTab(log_, tabs_);
+    tabs_->addTab(info_tab_, tr("INFO"));
+    tabs_->addTab(smart_tab_, tr("SMART"));
+    tabs_->addTab(new PlannedTab(tr("Surface Test"), QStringLiteral("v0.2"),
+                                 tr("Block-level read/verify scan with a latency-classified sector map, "
+                                    "configurable LBA range, block size and access pattern."),
+                                 tabs_),
+                  tr("SURFACE"));
+    tabs_->addTab(new PlannedTab(tr("Benchmark"), QStringLiteral("v0.3"),
+                                 tr("Sequential and random read benchmarks, access time, full-disk speed curve "
+                                    "and queue-depth testing."),
+                                 tabs_),
+                  tr("BENCHMARK"));
+    tabs_->addTab(part_tab_, tr("PARTITIONS"));
+    tabs_->addTab(new PlannedTab(tr("Erase"), QStringLiteral("v0.4"),
+                                 tr("Zero / pattern / random overwrite with verification, ATA Secure Erase and "
+                                    "NVMe Sanitize, behind typed confirmation and identity revalidation."),
+                                 tabs_),
+                  tr("ERASE"));
+    tabs_->addTab(new PlannedTab(tr("Clone / Image"), QStringLiteral("v0.6"),
+                                 tr("Raw and zstd-compressed imaging, restore, disk-to-disk clone and "
+                                    "damaged-media recovery copy with an error map."),
+                                 tabs_),
+                  tr("CLONE / IMAGE"));
+    tabs_->addTab(new PlannedTab(tr("Hex Sector Inspector"), QStringLiteral("v0.7"),
+                                 tr("Offset / hex / ASCII view with jump-to-LBA, search and structure "
+                                    "interpreters for MBR, GPT, FAT, NTFS and ext4."),
+                                 tabs_),
+                  tr("HEX"));
+    tabs_->addTab(log_tab_, tr("LOG"));
+    connect(smart_tab_, &SmartTab::queryRequested, this, &MainWindow::querySmart);
+    connect(part_tab_, &PartitionsTab::readRequested, this, &MainWindow::readPartitions);
+
+    auto* actbox = new QGroupBox(tr("Activity Log"), vsplit_);
+    auto* al = new QVBoxLayout(actbox);
+    al->setContentsMargins(4, 2, 4, 4);
+    activity_ = new QTableView(actbox);
+    activity_->setModel(log_);
+    setup_table(activity_, QStringLiteral("log.activity"), false);
+    activity_->setColumnHidden(LogModel::Device, true);
+    activity_->horizontalHeader()->setVisible(false);
+    activity_->resizeColumnToContents(LogModel::Time);
+    activity_->setColumnWidth(LogModel::Time,
+                              activity_->fontMetrics().horizontalAdvance(QStringLiteral("0000-00-00 00:00:00.000")) + 16);
+    activity_->setColumnWidth(LogModel::Level, activity_->fontMetrics().horizontalAdvance(QStringLiteral("CRITICAL")) + 16);
+    connect(log_, &QAbstractItemModel::rowsInserted, activity_, &QTableView::scrollToBottom);
+    al->addWidget(activity_);
+
+    vsplit_->addWidget(tabs_);
+    vsplit_->addWidget(actbox);
+    vsplit_->setStretchFactor(0, 4);
+    vsplit_->setStretchFactor(1, 1);
+    col->addWidget(vsplit_, 1);
+    setCentralWidget(central);
+}
+
+void MainWindow::buildStatusBar() {
+    auto mk = [this](const QString& text) {
+        auto* l = new QLabel(text, this);
+        l->setObjectName(QStringLiteral("statusPanel"));
+        return l;
+    };
+    st_device_ = mk(tr("No device"));
+    st_mode_ = mk(tr("READ-ONLY"));
+    st_mode_->setToolTip(tr("v0.1 never opens a device for writing"));
+    st_priv_ = mk(tr("Privileges: %1").arg(qs(privilege_label())));
+    st_priv_->setToolTip(running_elevated() ? tr("Running elevated")
+                                            : tr("Reading sectors and SMART data from physical disks usually "
+                                                 "needs root / Administrator"));
+    statusBar()->addWidget(st_device_, 1);
+    statusBar()->addPermanentWidget(st_mode_);
+    statusBar()->addPermanentWidget(st_priv_);
+    statusBar()->setSizeGripEnabled(true);
+}
+
+void MainWindow::restoreSettings() {
+    QSettings s;
+    if (!restoreGeometry(s.value(QStringLiteral("window/geometry")).toByteArray())) resize(980, 680);
+    restoreState(s.value(QStringLiteral("window/state")).toByteArray());
+    vsplit_->restoreState(s.value(QStringLiteral("window/vsplit")).toByteArray());
+    tabs_->setCurrentIndex(s.value(QStringLiteral("window/tab"), 0).toInt());
+    act_show_serials_->setChecked(false);  // never persisted: privacy by default
+}
+
+void MainWindow::closeEvent(QCloseEvent* e) {
+    QSettings s;
+    s.setValue(QStringLiteral("window/geometry"), saveGeometry());
+    s.setValue(QStringLiteral("window/state"), saveState());
+    s.setValue(QStringLiteral("window/vsplit"), vsplit_->saveState());
+    s.setValue(QStringLiteral("window/tab"), tabs_->currentIndex());
+    info_tab_->saveState();
+    smart_tab_->saveState();
+    part_tab_->saveState();
+    log_tab_->saveState();
+    save_table_state(activity_);
+    e->accept();
+}
+
+// ------------------------------------------------------------------ devices
+
+int MainWindow::indexOfPath(const std::string& path) const {
+    for (std::size_t i = 0; i < devices_.size(); ++i)
+        if (devices_[i].info.path == path) return static_cast<int>(i);
+    return -1;
+}
+
+DeviceEntry* MainWindow::current() {
+    return current_ >= 0 && current_ < static_cast<int>(devices_.size()) ? &devices_[static_cast<std::size_t>(current_)]
+                                                                         : nullptr;
+}
+
+void MainWindow::refreshDevices() {
+    const std::string keep = current() ? current()->info.path : std::string{};
+    // Physical devices are re-enumerated; opened images are kept (listed last).
+    std::vector<DeviceEntry> next;
+    auto devs = enumerate_devices();
+    if (!devs) {
+        log_->add(Severity::error, tr("Device enumeration failed: %1").arg(qs(devs.error().describe())));
+    } else {
+        for (auto& d : *devs) {
+            DeviceEntry e;
+            e.info = std::move(d);
+            // Carry SMART / partition results across a refresh only when the
+            // identity still matches (path alone is not identity, spec §17.2).
+            for (const auto& old : devices_)
+                if (!old.is_image && old.info.path == e.info.path && old.info.stable_id == e.info.stable_id &&
+                    old.info.capacity_bytes == e.info.capacity_bytes && old.info.model == e.info.model) {
+                    e.smart = old.smart;
+                    e.health = old.health;
+                    e.table = old.table;
+                    if (e.smart) smart::apply_capabilities(*e.smart, e.info);
+                }
+            next.push_back(std::move(e));
+        }
+        log_->add(Severity::info, tr("Found %n storage device(s)", nullptr, static_cast<int>(devs->size())));
+    }
+    for (auto& e : devices_)
+        if (e.is_image) next.push_back(std::move(e));
+    devices_ = std::move(next);
+
+    const QSignalBlocker block(selector_);
+    selector_->clear();
+    for (const auto& e : devices_) {
+        auto icon = style()->standardIcon(e.is_image ? QStyle::SP_FileIcon
+                                                     : (e.info.removable == Tri::yes ? QStyle::SP_DriveFDIcon
+                                                                                     : QStyle::SP_DriveHDIcon));
+        selector_->addItem(icon, e.displayName());
+    }
+    // Never silently switch targets: if the previously selected device is
+    // gone, select nothing rather than whichever device took its slot.
+    int idx = keep.empty() ? (devices_.empty() ? -1 : 0) : indexOfPath(keep);
+    if (!keep.empty() && idx < 0)
+        log_->add(Severity::warning, tr("Previously selected device %1 is no longer present").arg(qs(keep)));
+    selector_->setCurrentIndex(idx);
+    onDeviceSelected(idx);
+}
+
+void MainWindow::openImage(const QString& path, std::uint32_t sector_size) {
+    const auto p = QFileInfo(path).absoluteFilePath().toStdString();
+    if (int existing = indexOfPath(p); existing >= 0) {
+        selector_->setCurrentIndex(existing);
+        return;
+    }
+    auto dev = open_image(p, {}, sector_size);
+    if (!dev) {
+        log_->add(Severity::error, tr("Cannot open image: %1").arg(qs(dev.error().describe())), path);
+        QMessageBox::warning(this, tr("Open Disk Image"), qs(dev.error().describe()));
+        return;
+    }
+    DeviceEntry e;
+    e.info = (*dev)->info();
+    e.is_image = true;
+    e.image_sector_size = sector_size;
+    devices_.push_back(std::move(e));
+    selector_->addItem(style()->standardIcon(QStyle::SP_FileIcon), devices_.back().displayName());
+    log_->add(Severity::info, tr("Opened image read-only (%1-byte sectors)").arg(sector_size), path);
+    selector_->setCurrentIndex(static_cast<int>(devices_.size()) - 1);
+}
+
+void MainWindow::openImageDialog() {
+    QSettings s;
+    const auto dir = s.value(QStringLiteral("paths/lastImageDir")).toString();
+    const auto path = QFileDialog::getOpenFileName(this, tr("Open Disk Image"), dir,
+                                                   tr("Disk images (*.img *.raw *.bin *.dd);;All files (*)"));
+    if (path.isEmpty()) return;
+    s.setValue(QStringLiteral("paths/lastImageDir"), QFileInfo(path).absolutePath());
+    openImage(path);
+}
+
+void MainWindow::onDeviceSelected(int index) {
+    current_ = index;
+    auto* e = current();
+    if (e && e->is_image && !e->table && e->table_error.isEmpty()) readPartitionsNow();  // images: cheap and safe
+    showCurrent();
+}
+
+void MainWindow::showCurrent() {
+    auto* e = current();
+    info_tab_->setDevice(e, show_serials_);
+    smart_tab_->setDevice(e);
+    smart_tab_->setBusy(busy_smart_);
+    part_tab_->setDevice(e);
+    part_tab_->setBusy(busy_parts_);
+    updateSummary();
+    const bool has = e != nullptr;
+    act_save_report_->setEnabled(has);
+    act_smart_->setEnabled(has && !e->is_image && !busy_smart_);
+    act_partitions_->setEnabled(has && !busy_parts_);
+    st_device_->setText(has ? qs(e->info.path) : tr("No device"));
+}
+
+void MainWindow::updateSummary() {
+    auto* e = current();
+    auto set = [](QLabel* l, const QString& v) { l->setText(v.isEmpty() ? QStringLiteral("-") : v); };
+    if (!e) {
+        for (auto* l : {sum_model_, sum_capacity_, sum_iface_, sum_geometry_, sum_firmware_, sum_usage_, sum_temp_})
+            set(l, {});
+        set(sum_health_, tr("UNKNOWN"));
+        return;
+    }
+    const auto& d = e->info;
+    set(sum_model_, qs(d.vendor.empty() || d.vendor == "ATA" ? d.model : d.vendor + " " + d.model));
+    set(sum_capacity_, qs(format_capacity(d.capacity_bytes)));
+    set(sum_iface_, QStringLiteral("%1 / %2").arg(qs(bus_type_name(d.bus)), qs(media_kind_name(d.media))));
+    set(sum_geometry_, tr("%1 x %2 B (phys %3 B)")
+                           .arg(d.total_lbas())
+                           .arg(d.logical_sector_size)
+                           .arg(d.physical_sector_size));
+    set(sum_firmware_, qs(d.firmware));
+    QString usage;
+    if (d.is_system_disk) usage = tr("SYSTEM DISK  ");
+    if (!d.mountpoints.empty()) {
+        QStringList m;
+        for (const auto& x : d.mountpoints) m << qs(x);
+        usage += tr("Mounted: %1").arg(m.join(QStringLiteral(", ")));
+    } else if (!d.holders.empty()) {
+        usage += tr("In use by %1").arg(qs(d.holders.front()));
+    } else if (!e->is_image) {
+        usage += tr("Not mounted");
+    }
+    set(sum_usage_, usage);
+    set(sum_temp_, e->smart && e->smart->temperature_c ? tr("%1 °C").arg(*e->smart->temperature_c) : QString());
+    const auto h = e->health ? e->health->status : smart::Health::unknown;
+    sum_health_->setText(e->is_image ? tr("N/A") : qs(smart::health_name(h)));
+    switch (h) {
+        case smart::Health::good: sum_health_->setObjectName(QStringLiteral("healthGood")); break;
+        case smart::Health::warning: sum_health_->setObjectName(QStringLiteral("healthWarning")); break;
+        case smart::Health::critical: sum_health_->setObjectName(QStringLiteral("healthCritical")); break;
+        default: sum_health_->setObjectName(QStringLiteral("healthUnknown")); break;
+    }
+    sum_health_->style()->unpolish(sum_health_);
+    sum_health_->style()->polish(sum_health_);
+}
+
+// ------------------------------------------------------------------ operations
+
+void MainWindow::querySmart() {
+    auto* e = current();
+    if (!e || e->is_image || busy_smart_) return;
+    busy_smart_ = true;
+    showCurrent();
+    const std::string path = e->info.path;
+    log_->add(Severity::info, tr("Querying SMART via smartctl"), qs(path));
+    QPointer<MainWindow> self(this);
+    run_worker(this, [self, path] {
+        auto rep = smart::query(path);
+        QMetaObject::invokeMethod(
+            qApp,
+            [self, path, rep = std::move(rep)]() mutable {
+                if (!self) return;
+                self->busy_smart_ = false;
+                const int idx = self->indexOfPath(path);
+                if (idx < 0) {
+                    self->log_->add(Severity::warning, tr("SMART result discarded: device disappeared"), qs(path));
+                    self->showCurrent();
+                    return;
+                }
+                auto& entry = self->devices_[static_cast<std::size_t>(idx)];
+                if (!rep) {
+                    entry.smart_error = qs(rep.error().describe());
+                    self->log_->add(Severity::error, tr("SMART query failed: %1").arg(entry.smart_error), qs(path));
+                } else {
+                    entry.smart_error.clear();
+                    entry.smart = std::move(rep).value();
+                    entry.health = smart::assess(*entry.smart);
+                    smart::apply_capabilities(*entry.smart, entry.info);
+                    const auto sev = entry.health->status == smart::Health::critical ? Severity::critical
+                                     : entry.health->status == smart::Health::warning ? Severity::warning
+                                                                                      : Severity::info;
+                    self->log_->add(sev, tr("SMART health: %1").arg(qs(smart::health_name(entry.health->status))),
+                                    qs(path));
+                }
+                self->showCurrent();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::readPartitionsNow() {
+    auto* e = current();
+    if (!e) return;
+    OpenOptions oo;
+    oo.mode = OpenMode::read_only;
+    auto dev = e->is_image ? open_image(e->info.path, oo, e->image_sector_size) : open_device(e->info.path, oo);
+    if (!dev) {
+        e->table_error = tr("Cannot open device: %1").arg(qs(dev.error().describe()));
+        log_->add(Severity::error, e->table_error, qs(e->info.path));
+        return;
+    }
+    auto t = partitions::read_partition_table(**dev);
+    if (!t) {
+        e->table_error = qs(t.error().describe());
+        log_->add(Severity::error, tr("Partition table read failed: %1").arg(e->table_error), qs(e->info.path));
+        return;
+    }
+    e->table_error.clear();
+    e->table = std::move(t).value();
+    log_->add(e->table->warnings.empty() ? Severity::info : Severity::warning,
+              tr("Partition table: %1, %2 partition(s), %3 warning(s)")
+                  .arg(qs(partitions::table_type_name(e->table->type)).toUpper())
+                  .arg(e->table->partitions.size())
+                  .arg(e->table->warnings.size()),
+              qs(e->info.path));
+}
+
+void MainWindow::readPartitions() {
+    auto* e = current();
+    if (!e || busy_parts_) return;
+    if (e->is_image) {
+        readPartitionsNow();
+        showCurrent();
+        return;
+    }
+    busy_parts_ = true;
+    showCurrent();
+    const std::string path = e->info.path;
+    QPointer<MainWindow> self(this);
+    run_worker(this, [self, path] {
+        OpenOptions oo;
+        oo.mode = OpenMode::read_only;
+        Result<partitions::PartitionTable> result = Error{Errc::internal, "not run"};
+        auto dev = open_device(path, oo);
+        if (!dev) result = Error{dev.error().code, "cannot open device: " + dev.error().describe()};
+        else result = partitions::read_partition_table(**dev);
+        QMetaObject::invokeMethod(
+            qApp,
+            [self, path, result = std::move(result)]() mutable {
+                if (!self) return;
+                self->busy_parts_ = false;
+                const int idx = self->indexOfPath(path);
+                if (idx >= 0) {
+                    auto& entry = self->devices_[static_cast<std::size_t>(idx)];
+                    if (!result) {
+                        entry.table_error = qs(result.error().describe());
+                        self->log_->add(Severity::error, tr("Partition table read failed: %1").arg(entry.table_error),
+                                        qs(path));
+                    } else {
+                        entry.table_error.clear();
+                        entry.table = std::move(result).value();
+                        self->log_->add(Severity::info,
+                                        tr("Partition table: %1, %2 partition(s)")
+                                            .arg(qs(partitions::table_type_name(entry.table->type)).toUpper())
+                                            .arg(entry.table->partitions.size()),
+                                        qs(path));
+                    }
+                }
+                self->showCurrent();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::saveReport() {
+    auto* e = current();
+    if (!e) return;
+    const auto include = QMessageBox::question(this, tr("Save Report"),
+                                               tr("Include serial numbers in the report?\n\n"
+                                                  "They are omitted by default because reports are often shared."),
+                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    reports::Privacy priv{include == QMessageBox::Yes};
+    const auto path = QFileDialog::getSaveFileName(this, tr("Save Report"),
+                                                   QString::fromStdString(e->info.name) + QStringLiteral("-report.json"),
+                                                   tr("JSON report (*.json);;All files (*)"));
+    if (path.isEmpty()) return;
+    auto j = reports::envelope("device-report");
+    j["device"] = reports::to_json(e->info, priv);
+    if (e->smart) {
+        j["smart"] = reports::to_json(*e->smart, priv);
+        if (e->health) j["assessment"] = reports::to_json(*e->health);
+    }
+    if (e->table) j["partitions"] = reports::to_json(*e->table);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QMessageBox::warning(this, tr("Save Report"), tr("Cannot write %1:\n%2").arg(path, f.errorString()));
+        return;
+    }
+    f.write(QByteArray::fromStdString(j.dump(2)));
+    log_->add(Severity::info, tr("Report saved to %1").arg(path), qs(e->info.path));
+}
+
+void MainWindow::selectIndex(int index) {
+    if (index >= 0 && index < selector_->count()) selector_->setCurrentIndex(index);
+}
+
+void MainWindow::selectTab(const QString& name) {
+    for (int i = 0; i < tabs_->count(); ++i)
+        if (tabs_->tabText(i).remove(QLatin1Char('&')).compare(name, Qt::CaseInsensitive) == 0) tabs_->setCurrentIndex(i);
+}
+
+void MainWindow::about() {
+    QMessageBox::about(this, tr("About platter"),
+                       tr("<b>platter %1</b><br>Storage diagnostics, maintenance and management utility.<br><br>"
+                          "This build is <b>read-only</b>: it identifies devices, reads SMART data via "
+                          "smartmontools and inspects partition tables, and never writes to a device.<br><br>"
+                          "No telemetry. No network access. No registration.")
+                           .arg(QString::fromLatin1(kVersion)));
+}
+
+void MainWindow::licenseInfo() {
+    QMessageBox::information(this, tr("License Information"),
+                             tr("platter: license to be decided by the author.\n\n"
+                                "Third-party components:\n"
+                                "  Qt 6 (LGPL v3)\n"
+                                "  nlohmann/json (MIT)\n"
+                                "  smartmontools (GPL v2, invoked as an external program)\n"));
+}
+
+}  // namespace platter::gui

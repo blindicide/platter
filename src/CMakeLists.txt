@@ -5,6 +5,7 @@ add_library(platter-core STATIC
     core/device.cpp
     core/bytes.cpp
     platform/image/image_info.cpp
+    platform/privileges.cpp
 )
 
 if(WIN32)
@@ -57,4 +58,27 @@ if(PLATTER_BUILD_CLI)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-reports)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
+endif()
+
+# ----------------------------------------------------------------- platter-gui
+if(PLATTER_BUILD_GUI)
+    set(CMAKE_AUTOMOC ON)
+    add_executable(platter-gui WIN32
+        gui/main.cpp
+        gui/styles/classic_theme.cpp
+        gui/widgets/log_model.cpp
+        gui/widgets/table_tools.cpp
+        gui/widgets/partition_bar.cpp
+        gui/tabs/tabs.cpp
+        gui/mainwindow/main_window.cpp
+        # headers listed so AUTOMOC sees the Q_OBJECT classes
+        gui/widgets/log_model.hpp
+        gui/widgets/partition_bar.hpp
+        gui/tabs/tabs.hpp
+        gui/mainwindow/main_window.hpp
+    )
+    target_link_libraries(platter-gui PRIVATE
+        Qt6::Widgets platter-core platter-partitions platter-smart platter-reports)
+    platter_set_warnings(platter-gui)
+    install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

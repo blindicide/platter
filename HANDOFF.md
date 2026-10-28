@@ -76,6 +76,22 @@ Done:
   Cross-compiles to `platter-cli.exe` with MinGW.
 - Parser cross-checked against util-linux **sfdisk** (independent
   implementation) for GPT and MBR+logicals: identical LBAs, names, signatures.
+- Qt 6 Widgets GUI (`src/gui/`, `platter-gui`): classic theme (Qt "Windows"
+  style + Win2000 #D4D0C8 palette, navy selection, Tahoma/Liberation Sans 8pt,
+  animations off), full spec menu bar (unbuilt features present but disabled
+  with "Planned for v0.x" tips), 16px toolbar with device selector, Device
+  Summary panel, tabs INFO / SMART / SURFACE / BENCHMARK / PARTITIONS / ERASE /
+  CLONE / IMAGE / HEX / LOG (planned ones are placeholders), Activity Log pane,
+  status bar (device, READ-ONLY, privileges). SMART query and partition reads
+  run on worker threads; results are matched back by device path and
+  discarded if the device vanished. Refresh never silently re-targets a
+  different device. Tables: sortable, copy as TSV, export CSV, persistent
+  column layout (QSettings). Save Report writes the shared JSON schema and asks
+  before including serials. Serials masked on screen unless Settings > Show
+  Serial Numbers (never persisted).
+  Dev aids: `platter-gui IMG... --tab NAME --size WxH --select N --query-smart
+  --screenshot out.png` with `QT_QPA_PLATFORM=offscreen` renders headless;
+  `PLATTER_SMARTCTL=<script>` swaps in a fake smartctl for UI work.
 - **43 test cases / 374 assertions passing** (range math, CRC, image device,
   GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs,
   SMART fixtures, process runner, fake-smartctl end-to-end, sfdisk cross-check).
@@ -90,8 +106,7 @@ Done:
   Cross-compile: `cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake -DPLATTER_BUILD_TESTS=OFF -DPLATTER_BUILD_GUI=OFF`
 
 Next up (in order):
-1. Qt GUI skeleton with classic theme.
-2. GitHub Actions CI, docs (architecture, safety, cli-reference).
+1. GitHub Actions CI, docs (architecture, safety, cli-reference).
 
 ## 3. Layout
 
@@ -148,6 +163,12 @@ Test helpers in `tests/support/` can synthesize GPT (`write_gpt`) and MBR+EBR
 - Windows: exclusive access to physical disks needs FSCTL_LOCK_VOLUME +
   FSCTL_DISMOUNT_VOLUME per volume (destructive pipeline, v0.4).
 - Windows unit tests have never run (no Wine here); CI will be first.
+- GUI has never been built with MSVC or run on Windows; only Linux/offscreen.
+- Toolbar icons are Qt standard icons; spec wants small monochrome 16x16
+  custom icons (assets/icons) later.
+- Image sector size in the GUI is 512 unless `--sector-size 4096` is passed
+  on the command line; needs a choice in Open Disk Image.
+- virtio disks show the PCI vendor id ("0x1af4") as model; cosmetic.
 - nlohmann_json FetchContent download has no pinned URL_HASH yet.
 - SMART fixtures in `tests/fixtures/smart/` are HAND-WRITTEN in smartctl 7.4's
   JSON shape, not real captures. Replace/add real `smartctl --json=c -a` output

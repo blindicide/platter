@@ -34,8 +34,8 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.2 Surface Testing — in progress** (v0.1 done; Linux + MinGW CI
-green; Windows MSVC CI being fixed; no real-hardware run yet).
+Milestone: **v0.2 Surface Testing — in progress** (v0.1 done; CI green on Linux,
+Windows MSVC and MinGW; no real-hardware run yet).
 
 ### v0.2 so far
 - Operation engine (`include/platter/core/operation.hpp`): states CREATED ->
@@ -66,8 +66,17 @@ green; Windows MSVC CI being fixed; no real-hardware run yet).
 - **67 test cases / 623 assertions passing**; operation/surface tests were
   stress-run 25x randomized and pinned to one CPU with no flakes.
 
-Remaining for v0.2: scan export/import (JSON, CSV, text report), CLI
-`surface scan`, GUI SURFACE tab with the sector map.
+- Scan export/import (`include/platter/reports/scan_report.hpp`, in
+  `platter-reports`): JSON (canonical; envelope kind `surface-scan`,
+  `scan_schema` 1; tested blocks as compact rows `[index, duration_us,
+  time_ms, errc, retries, class]`, untested implied), CSV (one row per tested
+  block with exact LBA range and MB/s), text report (config, results,
+  distribution, first 100 unreadable ranges, explicit "latency is not health"
+  note). `scan_from_json` validates schema, geometry, indices, classes,
+  duplicates and row count and rejects anything inconsistent
+  (`corrupt_data`). Serials omitted / masked unless requested.
+
+Remaining for v0.2: CLI `surface scan`, GUI SURFACE tab with the sector map.
 
 ### Core (`platter-core`)
 - `Error` / `Result<T>` / `Status` (no exceptions across module boundaries;
@@ -153,6 +162,12 @@ Remaining for v0.2: scan export/import (JSON, CSV, text report), CLI
   sfdisk cross-check. Release `-Werror` build is clean.
 
 ### CI / docs
+- CI failures are re-emitted as `::error` annotations by `scripts/ci-run.sh`.
+  This matters for agents: raw Actions logs are NOT reachable from the agent
+  sandbox (blob storage blocked), but annotations are, via
+  `GET /repos/blindicide/platter/check-runs/<job_id>/annotations`.
+- Windows CI lets CMake choose the Visual Studio generator; the hard-coded
+  "Visual Studio 17 2022" broke on the current runner image.
 - `.github/workflows/ci.yml` (every step `shell: bash`): Linux GCC + Qt 6
   (-Werror build, ctest, CLI smoke on an sfdisk image, offscreen GUI
   screenshot, artifacts); Windows MSVC + Qt 6.7 via install-qt-action (build,

@@ -55,9 +55,9 @@ target_link_libraries(platter-core PUBLIC Threads::Threads)
 platter_set_warnings(platter-surface)
 
 # ------------------------------------------------------------- platter-reports
-add_library(platter-reports STATIC reports/json.cpp)
+add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp)
 target_link_libraries(platter-reports
-    PUBLIC platter-core platter-partitions platter-smart nlohmann_json::nlohmann_json)
+    PUBLIC platter-core platter-partitions platter-smart platter-surface nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
 # ----------------------------------------------------------------- platter-cli

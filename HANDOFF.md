@@ -57,8 +57,18 @@ Done:
   loop detection, overlap / out-of-bounds / usable-area warnings, 1 MiB
   alignment flag, UTF-16 names, type-name tables.
 - CRC32 + little-endian helpers (`include/platter/core/bytes.hpp`).
-- **29 test cases / 239 assertions passing** (range math, CRC, image device,
-  GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs).
+- SMART (`src/smart/smart.cpp`, `platter-smart`): runs `smartctl --json=c -a`
+  (read-only query, no shell, timeout) and parses ATA attributes, NVMe health
+  log, self-test logs (ATA + NVMe), error-log count, smartctl messages/exit
+  bits. `assess()` is conservative: PASSED alone -> UNKNOWN; counts use the
+  low 32 bits of raw (vendor-packed high bits ignored); CRC errors flagged as
+  cabling/bridge; every contributing observation is listed. Capabilities
+  SMART/SELF_TEST are set only from actual smartctl results.
+- Process runner (`include/platter/core/process.hpp`): posix_spawnp / CreateProcessW,
+  argv passed verbatim, stdout/stderr capture, kill on timeout.
+- **42 test cases / 343 assertions passing** (range math, CRC, image device,
+  GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs,
+  SMART fixtures, process runner, fake-smartctl end-to-end).
 
 - Win32 backend (`src/platform/windows/`): `Win32FileDevice` (ReadFile/WriteFile
   with OVERLAPPED offsets, 1 GiB chunking, EOF -> short_transfer), PhysicalDrive
@@ -70,10 +80,9 @@ Done:
   Cross-compile: `cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake -DPLATTER_BUILD_TESTS=OFF -DPLATTER_BUILD_GUI=OFF`
 
 Next up (in order):
-1. smartctl JSON adapter + conservative health assessment.
-2. `platter-cli`: `devices list|info`, `partitions list`, `smart show`, `--json`.
-3. Qt GUI skeleton with classic theme.
-4. GitHub Actions CI, docs (architecture, safety, cli-reference).
+1. `platter-cli`: `devices list|info`, `partitions list`, `smart show`, `--json`.
+2. Qt GUI skeleton with classic theme.
+3. GitHub Actions CI, docs (architecture, safety, cli-reference).
 
 ## 3. Layout
 
@@ -131,6 +140,12 @@ Test helpers in `tests/support/` can synthesize GPT (`write_gpt`) and MBR+EBR
   FSCTL_DISMOUNT_VOLUME per volume (destructive pipeline, v0.4).
 - Windows unit tests have never run (no Wine here); CI will be first.
 - nlohmann_json FetchContent download has no pinned URL_HASH yet.
+- SMART fixtures in `tests/fixtures/smart/` are HAND-WRITTEN in smartctl 7.4's
+  JSON shape, not real captures. Replace/add real `smartctl --json=c -a` output
+  from the owner's drives once hardware testing is allowed (strip serials).
+- `process_posix.cpp` uses `pipe2` (Linux/glibc); macOS would need pipe+fcntl.
+- Health thresholds (temperature 60 °C ATA / 75 °C NVMe, endurance 90%) are
+  hard-coded; spec wants them configurable via Settings later.
 - Partition table type is not filled into `DeviceInfo::partition_table` during
   enumeration (that needs a read; enumeration is metadata-only by design).
   Callers that open the device can fill it via `read_partition_table()`.

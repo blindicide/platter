@@ -1,0 +1,257 @@
+{
+ "json_format_version": [
+  1,
+  0
+ ],
+ "smartctl": {
+  "version": [
+   7,
+   4
+  ],
+  "svn_revision": "5530",
+  "argv": [
+   "smartctl",
+   "--json=c",
+   "-a",
+   "/dev/sda"
+  ],
+  "exit_status": 0
+ },
+ "device": {
+  "name": "/dev/sda",
+  "info_name": "/dev/sda [SAT]",
+  "type": "sat",
+  "protocol": "ATA"
+ },
+ "model_family": "Western Digital Blue",
+ "model_name": "WDC WD10EZEX-08WN4A0",
+ "serial_number": "WD-WCC6Y1234567",
+ "firmware_version": "02.01A02",
+ "user_capacity": {
+  "blocks": 1953525168,
+  "bytes": 1000204886016
+ },
+ "logical_block_size": 512,
+ "physical_block_size": 4096,
+ "rotation_rate": 7200,
+ "smart_support": {
+  "available": true,
+  "enabled": true
+ },
+ "smart_status": {
+  "passed": true
+ },
+ "ata_smart_data": {
+  "capabilities": {
+   "self_tests_supported": true
+  }
+ },
+ "ata_smart_attributes": {
+  "revision": 16,
+  "table": [
+   {
+    "id": 1,
+    "name": "Raw_Read_Error_Rate",
+    "value": 200,
+    "worst": 200,
+    "thresh": 51,
+    "when_failed": "",
+    "flags": {
+     "value": 47,
+     "string": "POSR-K ",
+     "prefailure": true
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 3,
+    "name": "Spin_Up_Time",
+    "value": 175,
+    "worst": 172,
+    "thresh": 21,
+    "when_failed": "",
+    "flags": {
+     "value": 39,
+     "string": "POS--K ",
+     "prefailure": true
+    },
+    "raw": {
+     "value": 2241,
+     "string": "2241"
+    }
+   },
+   {
+    "id": 5,
+    "name": "Reallocated_Sector_Ct",
+    "value": 200,
+    "worst": 200,
+    "thresh": 140,
+    "when_failed": "",
+    "flags": {
+     "value": 51,
+     "string": "PO--CK ",
+     "prefailure": true
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 9,
+    "name": "Power_On_Hours",
+    "value": 88,
+    "worst": 88,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 9120,
+     "string": "9120"
+    }
+   },
+   {
+    "id": 12,
+    "name": "Power_Cycle_Count",
+    "value": 99,
+    "worst": 99,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 1342,
+     "string": "1342"
+    }
+   },
+   {
+    "id": 194,
+    "name": "Temperature_Celsius",
+    "value": 110,
+    "worst": 98,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 34,
+     "string": "-O---K ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 33,
+     "string": "33"
+    }
+   },
+   {
+    "id": 196,
+    "name": "Reallocated_Event_Count",
+    "value": 200,
+    "worst": 200,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 197,
+    "name": "Current_Pending_Sector",
+    "value": 200,
+    "worst": 200,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 198,
+    "name": "Offline_Uncorrectable",
+    "value": 100,
+    "worst": 253,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 48,
+     "string": "----CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 199,
+    "name": "UDMA_CRC_Error_Count",
+    "value": 200,
+    "worst": 200,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   }
+  ]
+ },
+ "power_on_time": {
+  "hours": 9120
+ },
+ "power_cycle_count": 1342,
+ "temperature": {
+  "current": 61
+ },
+ "ata_smart_error_log": {
+  "summary": {
+   "revision": 1,
+   "count": 0
+  }
+ },
+ "ata_smart_self_test_log": {
+  "standard": {
+   "revision": 1,
+   "table": [
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 9100
+    }
+   ],
+   "count": 1
+  }
+ }
+}

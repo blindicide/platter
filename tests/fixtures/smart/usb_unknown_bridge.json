@@ -1,0 +1,29 @@
+{
+ "json_format_version": [
+  1,
+  0
+ ],
+ "smartctl": {
+  "version": [
+   7,
+   4
+  ],
+  "exit_status": 1,
+  "messages": [
+   {
+    "string": "/dev/sdb: Unknown USB bridge [0x090c:0x1000 (0x1100)]",
+    "severity": "error"
+   },
+   {
+    "string": "Please specify device type with the -d option.",
+    "severity": "error"
+   }
+  ]
+ },
+ "device": {
+  "name": "/dev/sdb",
+  "info_name": "/dev/sdb",
+  "type": "scsi",
+  "protocol": "SCSI"
+ }
+}

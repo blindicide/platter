@@ -32,94 +32,125 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.1 Foundation — in progress.**
+Milestone: **v0.1 Foundation — feature-complete, awaiting first CI run and
+first real-hardware (read-only) run by the owner.**
 
-Done:
-- Repo skeleton and directory layout.
-- `platter::Error` / `Result<T>` / `Status` (no exceptions across module
-  boundaries; C++20 so no `std::expected`).
-- Overflow-safe range arithmetic and `validate_io()` (`include/platter/core/range.hpp`).
-- `DeviceInfo`, `CapabilitySet`, bus/media enums (`include/platter/core/device.hpp`).
-- `IBlockDevice` interface + `open_image()` / `open_device()` declarations.
-- POSIX file/block-device backend (`src/platform/posix/posix_file_device.cpp`):
-  pread/pwrite loops with EINTR + short-read handling, per-call timing,
-  O_DIRECT and O_EXCL support, BLKGETSIZE64/BLKSSZGET/BLKPBSZGET/BLKROGET.
+### Core (`platter-core`)
+- `Error` / `Result<T>` / `Status` (no exceptions across module boundaries;
+  C++20 so no `std::expected`).
+- Overflow-safe range arithmetic and `validate_io()` (`core/range.hpp`).
+- `DeviceInfo`, `CapabilitySet`, bus/media enums (`core/device.hpp`).
+- CRC32 + little-endian helpers (`core/bytes.hpp`).
+- Process runner (`core/process.hpp`): posix_spawnp / CreateProcessW, argv
+  passed verbatim (no shell), stdout/stderr capture, kill on timeout.
+- `running_elevated()` / `privilege_label()` (`platform/privileges.hpp`).
 
-- CMake build (`platter-core`, `platter-partitions`, `platter-tests`), deps via
-  find_package with FetchContent fallback (`cmake/PlatterDependencies.cmake`).
-- Linux sysfs enumeration (`src/platform/linux/sysfs.cpp`): model/vendor/fw,
-  serial (incl. SCSI VPD 0x80), stable id (wwid or best /dev/disk/by-id link,
-  wwn- preferred), bus from sysfs topology, rotational/removable/ro/discard,
-  mounts + swap per partition, holder chains (dm-crypt/LVM) followed
-  recursively, system-disk detection (/, /boot, /boot/efi, /usr).
-- Read-only MBR/GPT parser (`src/partitions/partition_table.cpp`): header and
-  entry-array CRC32, backup-GPT fallback, protective-MBR check, EBR chains with
-  loop detection, overlap / out-of-bounds / usable-area warnings, 1 MiB
-  alignment flag, UTF-16 names, type-name tables.
-- CRC32 + little-endian helpers (`include/platter/core/bytes.hpp`).
-- SMART (`src/smart/smart.cpp`, `platter-smart`): runs `smartctl --json=c -a`
-  (read-only query, no shell, timeout) and parses ATA attributes, NVMe health
-  log, self-test logs (ATA + NVMe), error-log count, smartctl messages/exit
-  bits. `assess()` is conservative: PASSED alone -> UNKNOWN; counts use the
-  low 32 bits of raw (vendor-packed high bits ignored); CRC errors flagged as
-  cabling/bridge; every contributing observation is listed. Capabilities
-  SMART/SELF_TEST are set only from actual smartctl results.
-- Process runner (`include/platter/core/process.hpp`): posix_spawnp / CreateProcessW,
-  argv passed verbatim, stdout/stderr capture, kill on timeout.
-- Reports (`src/reports/json.cpp`, `platter-reports`): shared JSON schema for
-  CLI `--json` and future GUI exports; serials omitted unless requested.
-- `platter-cli` (`src/cli/main.cpp`): `devices list|info`, `partitions list`,
-  `smart show`, `version`; `--json -o -v -q --show-serial --sector-size -d`;
-  documented exit codes (docs/cli-reference.md). Images are auto-detected
-  (any regular file). Short names: `sda` -> /dev/sda, `1`/`pd1` ->
-  \\.\PhysicalDrive1. Every target is opened `OpenMode::read_only`.
-  Cross-compiles to `platter-cli.exe` with MinGW.
-- Parser cross-checked against util-linux **sfdisk** (independent
-  implementation) for GPT and MBR+logicals: identical LBAs, names, signatures.
-- Qt 6 Widgets GUI (`src/gui/`, `platter-gui`): classic theme (Qt "Windows"
-  style + Win2000 #D4D0C8 palette, navy selection, Tahoma/Liberation Sans 8pt,
-  animations off), full spec menu bar (unbuilt features present but disabled
-  with "Planned for v0.x" tips), 16px toolbar with device selector, Device
-  Summary panel, tabs INFO / SMART / SURFACE / BENCHMARK / PARTITIONS / ERASE /
-  CLONE / IMAGE / HEX / LOG (planned ones are placeholders), Activity Log pane,
-  status bar (device, READ-ONLY, privileges). SMART query and partition reads
-  run on worker threads; results are matched back by device path and
-  discarded if the device vanished. Refresh never silently re-targets a
-  different device. Tables: sortable, copy as TSV, export CSV, persistent
-  column layout (QSettings). Save Report writes the shared JSON schema and asks
-  before including serials. Serials masked on screen unless Settings > Show
-  Serial Numbers (never persisted).
-  Dev aids: `platter-gui IMG... --tab NAME --size WxH --select N --query-smart
+### Backends
+- POSIX `PosixFileDevice` (`src/platform/posix/`): pread/pwrite loops with
+  EINTR + short-read handling, per-call timing, O_DIRECT / O_EXCL,
+  BLKGETSIZE64 / BLKSSZGET / BLKPBSZGET / BLKROGET. Used for images on all
+  POSIX systems and for Linux block devices.
+- Linux enumeration (`src/platform/linux/sysfs.cpp`): model/vendor/fw, serial
+  (incl. SCSI VPD 0x80), stable id (wwid or best /dev/disk/by-id link, wwn-
+  preferred), bus from sysfs topology, rotational/removable/ro/discard, mounts
+  + swap per partition, holder chains (dm-crypt/LVM) followed recursively,
+  system-disk detection (/, /boot, /boot/efi, /usr). Metadata only.
+- Win32 (`src/platform/windows/`): `Win32FileDevice` (ReadFile/WriteFile with
+  OVERLAPPED offsets, 1 GiB chunking, EOF -> short_transfer); PhysicalDrive
+  enumeration with **zero-access handles** (StorageDeviceProperty, geometry,
+  alignment, seek penalty, TRIM, IS_WRITABLE, device-id VPD -> wwn-/eui.
+  stable id); volume -> disk mapping via IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS;
+  system disk = disk hosting the Windows directory. **Compile-checked only**
+  (MinGW, warning-free); never executed.
+
+### Partitions (`platter-partitions`)
+- Read-only MBR/GPT parser: header and entry-array CRC32, backup-GPT fallback,
+  protective-MBR check, EBR chains with loop detection, overlap /
+  out-of-bounds / usable-area warnings, 1 MiB alignment flag, UTF-16 names,
+  type-name tables. Cross-checked against util-linux **sfdisk** (independent
+  implementation): identical LBAs, names, signatures.
+
+### SMART (`platter-smart`)
+- Runs `smartctl --json=c -a` (read-only query, timeout) and parses ATA
+  attributes, NVMe health log, ATA + NVMe self-test logs, error-log count,
+  smartctl messages / exit bits. `assess()` is conservative: PASSED alone ->
+  UNKNOWN; counts use the low 32 bits of raw (vendor-packed high bits
+  ignored); CRC errors flagged as cabling/bridge; every contributing
+  observation listed. SMART / SELF_TEST capabilities come only from actual
+  smartctl results.
+
+### Reports (`platter-reports`)
+- Shared JSON schema for CLI `--json` and GUI "Save Report"; envelope with
+  tool/version/schema/kind/timestamp; serials omitted unless requested.
+
+### CLI (`platter-cli`)
+- `devices list|info`, `partitions list`, `smart show`, `version`;
+  `--json -o -v -q --show-serial --sector-size -d`; documented exit codes
+  (docs/cli-reference.md). Any regular file is treated as an image. Short
+  names: `sda` -> /dev/sda; `1`/`pd1` -> \\.\PhysicalDrive1. Every target is
+  opened `OpenMode::read_only`. Cross-compiles to `platter-cli.exe` (MinGW).
+
+### GUI (`platter-gui`)
+- Classic theme (Qt "Windows" style + Win2000 #D4D0C8 palette, navy
+  selection, Tahoma / Liberation Sans 8 pt, animations off). Full spec menu
+  bar (unbuilt features present but disabled with "Planned for v0.x" tips),
+  16 px toolbar with device selector, Device Summary panel, tabs INFO / SMART /
+  SURFACE / BENCHMARK / PARTITIONS / ERASE / CLONE / IMAGE / HEX / LOG
+  (planned ones are placeholders), Activity Log pane, status bar (device,
+  READ-ONLY, privileges).
+- SMART query and partition reads run on worker threads; results are matched
+  back by device path and dropped if the device vanished. Refresh never
+  silently re-targets a different device; cached results survive a refresh
+  only if stable id + model + capacity still match.
+- Tables: sortable, Copy as TSV, Export CSV, persistent column layout
+  (QSettings). Save Report asks before including serials. Serials masked on
+  screen unless Settings > Show Serial Numbers (never persisted).
+- Dev aids: `platter-gui IMG... --tab NAME --size WxH --select N --query-smart
   --screenshot out.png` with `QT_QPA_PLATFORM=offscreen` renders headless;
   `PLATTER_SMARTCTL=<script>` swaps in a fake smartctl for UI work.
-- **43 test cases / 374 assertions passing** (range math, CRC, image device,
-  GPT 512/4096, corrupted primary/entries/both, MBR+logicals, EBR loops, sysfs,
-  SMART fixtures, process runner, fake-smartctl end-to-end, sfdisk cross-check).
 
-- Win32 backend (`src/platform/windows/`): `Win32FileDevice` (ReadFile/WriteFile
-  with OVERLAPPED offsets, 1 GiB chunking, EOF -> short_transfer), PhysicalDrive
-  enumeration with **zero-access handles** (StorageDeviceProperty, geometry,
-  alignment, seek penalty, TRIM, IS_WRITABLE, device-id VPD -> wwn-/eui. stable
-  id), volume -> disk mapping via IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, system
-  disk = disk hosting the Windows directory. **Compile-checked only** (MinGW,
-  warning-free); never executed. First real run must be by the owner.
-  Cross-compile: `cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake -DPLATTER_BUILD_TESTS=OFF -DPLATTER_BUILD_GUI=OFF`
+### Tests
+- **43 test cases / 374 assertions passing** (Catch2): range math, CRC, image
+  device (512/4096, read-only enforcement, bounds), GPT valid / corrupt
+  primary / corrupt entries / both corrupt / overlaps / no protective MBR, MBR
+  + logicals, EBR loops, past-end partitions, fake-sysfs enumeration, SMART
+  fixtures (ATA healthy/pending/failing/packed-raw/hot, NVMe healthy/worn,
+  unknown USB bridge, PASSED-only), process runner, fake-smartctl end-to-end,
+  sfdisk cross-check. Release `-Werror` build is clean.
 
-Next up (in order):
-1. GitHub Actions CI, docs (architecture, safety, cli-reference).
+### CI / docs
+- `.github/workflows/ci.yml` (every step `shell: bash`): Linux GCC + Qt 6
+  (-Werror build, ctest, CLI smoke on an sfdisk image, offscreen GUI
+  screenshot, artifacts); Windows MSVC + Qt 6.7 via install-qt-action (build,
+  ctest, CLI smoke on a blank image, offscreen GUI screenshot, windeployqt
+  package); MinGW cross-compile job. **Not yet run**; expect MSVC nits.
+- README.md, docs/architecture.md, docs/safety.md, docs/cli-reference.md.
+
+### Next up (in order)
+1. Push to GitHub, get CI green on both OSes.
+2. Owner's first real-hardware read-only run (devices list / info / smart /
+   partitions) on Windows and in WSL or a Linux VM, with the important drive
+   unplugged. Capture real smartctl JSON as fixtures (strip serials).
+3. v0.2: operation engine (spec §3.3) + read-only surface scan (spec §6).
 
 ## 3. Layout
 
 ```
-include/platter/<module>/   public headers
-src/core/                   error, range, device model (no Qt, no OS calls)
-src/platform/file_device.hpp  internal factory shared by backends
-src/platform/posix/         POSIX IBlockDevice (images everywhere, block devs on Linux)
-src/platform/image/         image-specific defaults + open_image()
-src/platform/linux/         sysfs enumeration (next)
-src/platform/windows/       Win32 backend (next)
-src/partitions/ src/smart/ src/cli/ src/gui/   (next)
-tests/unit/ tests/fixtures/
+include/platter/{core,platform,partitions,smart,reports}/   public headers
+src/core/             error, range, device model, bytes/CRC, process runner
+src/platform/         file_device.hpp (internal factory), privileges
+  posix/              PosixFileDevice
+  linux/              sysfs enumeration + open_device()
+  windows/            Win32FileDevice, enumeration, win32 utils
+  image/              image defaults + open_image()
+src/partitions/       MBR/GPT parser
+src/smart/            smartctl adapter + assessment
+src/reports/          JSON schema
+src/cli/              platter-cli
+src/gui/              platter-gui: styles/, widgets/, tabs/, mainwindow/
+tests/unit/ tests/support/ tests/fixtures/smart/
+cmake/                deps, warnings, MinGW toolchain
+docs/                 architecture, safety, CLI reference
 ```
 
 ## 4. Conventions and decisions

@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every step runs in bash, including on Windows (Git Bash). No PowerShell.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    name: Linux (GCC, Qt 6)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build qt6-base-dev nlohmann-json3-dev catch2 fdisk fonts-liberation
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPLATTER_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: CLI smoke test (images only)
+        run: |
+          truncate -s 64M smoke.img
+          printf 'label: gpt\nsize=16MiB, name="one"\nname="two"\n' | sfdisk -q smoke.img
+          ./build/src/platter-cli --version
+          ./build/src/platter-cli partitions list smoke.img
+          ./build/src/platter-cli partitions list --json smoke.img > partitions.json
+          set +e; ./build/src/platter-cli smart show smoke.img; rc=$?; set -e
+          test "$rc" -eq 7   # SMART on an image must be "unsupported"
+
+      - name: GUI smoke test (offscreen screenshot)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./build/src/platter-gui smoke.img --tab PARTITIONS --size 1000x700 --screenshot gui-linux.png
+          test -s gui-linux.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platter-linux-x86_64
+          path: |
+            build/src/platter-cli
+            build/src/platter-gui
+            gui-linux.png
+            partitions.json
+
+  windows:
+    name: Windows (MSVC, Qt 6)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: CLI smoke test (images only)
+        run: |
+          ./build/src/Release/platter-cli.exe --version
+          # A blank 8 MiB image: unpartitioned, read through the Win32 backend.
+          head -c 8388608 /dev/zero > blank.img
+          ./build/src/Release/platter-cli.exe partitions list blank.img
+          ./build/src/Release/platter-cli.exe devices info blank.img
+
+      - name: GUI smoke test (offscreen screenshot)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./build/src/Release/platter-gui.exe blank.img --size 1000x700 --screenshot gui-windows.png
+          test -s gui-windows.png
+
+      - name: Package
+        run: |
+          mkdir -p dist/platter
+          cp build/src/Release/platter-cli.exe build/src/Release/platter-gui.exe dist/platter/
+          windeployqt --release --no-translations --no-opengl-sw dist/platter/platter-gui.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platter-windows-x64
+          path: |
+            dist/platter
+            gui-windows.png
+
+  windows-cross:
+    name: Windows cross-compile (MinGW, core + CLI)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64 ninja-build
+      - name: Configure
+        run: >
+          cmake -S . -B build-win -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake
+          -DPLATTER_BUILD_GUI=OFF -DPLATTER_BUILD_TESTS=OFF -DPLATTER_WERROR=ON
+      - name: Build
+        run: cmake --build build-win

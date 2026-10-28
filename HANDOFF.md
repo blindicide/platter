@@ -34,8 +34,40 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.1 Foundation — feature-complete, awaiting first CI run and
-first real-hardware (read-only) run by the owner.**
+Milestone: **v0.2 Surface Testing — in progress** (v0.1 done; Linux + MinGW CI
+green; Windows MSVC CI being fixed; no real-hardware run yet).
+
+### v0.2 so far
+- Operation engine (`include/platter/core/operation.hpp`): states CREATED ->
+  VALIDATING -> READY -> RUNNING <-> PAUSED -> STOPPING -> COMPLETED / FAILED /
+  CANCELLED with an explicit edge table (`is_valid_transition`); invalid edges
+  are ignored so racing requests can't corrupt state. Worker thread per
+  operation; front ends POLL `progress()` (no per-sector callbacks).
+  Progress: bytes done/total, elapsed excluding pauses, 1 s-window current rate,
+  average rate, ETA, errors, warnings, current LBA, message. Cooperative
+  `OperationControl::checkpoint()` blocks while paused, returns false on cancel.
+- `DeviceLeaseRegistry`: many `shared_read` holders OR one `exclusive` holder
+  per device id; RAII leases. Surface scans hold a shared lease while running.
+- Surface scan (`include/platter/surface/surface_scan.hpp`, `platter-surface`):
+  READ mode only (VERIFY / WRITE* rejected at validation with `unsupported`;
+  VERIFY needs a device verify command or a documented fallback, spec §6.1).
+  Refuses a writable handle. Config: start/end LBA, block size (sector
+  multiple, <= 64 MiB), order forward / reverse / random / sampled (splitmix64,
+  deterministic per seed, identical on all platforms), retries (<= 16),
+  direct I/O (auto-fallback to buffered with a recorded warning), error policy
+  continue / stop-after-N, configurable latency thresholds (default 5/20/50/200 ms).
+  Per-block packed `BlockResult` (12 bytes: duration, time since start, errc,
+  retries, class); 1-byte class array for cheap map copies; streaming log2x16
+  latency histogram (~6 % percentile error) for min/max/mean/median/p95/p99.
+  A device that disappears (device_removed / not_found) stops the scan at once,
+  with no retries. Durations come from `IOResult::duration_ns` on success.
+- Test double `tests/support/faulty_device.hpp`: bad LBAs, flaky LBAs (fail N
+  then recover), fake per-LBA latency, real delay, simulated removal.
+- **67 test cases / 623 assertions passing**; operation/surface tests were
+  stress-run 25x randomized and pinned to one CPU with no flakes.
+
+Remaining for v0.2: scan export/import (JSON, CSV, text report), CLI
+`surface scan`, GUI SURFACE tab with the sector map.
 
 ### Core (`platter-core`)
 - `Error` / `Result<T>` / `Status` (no exceptions across module boundaries;

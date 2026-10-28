@@ -4,6 +4,7 @@ add_library(platter-core STATIC
     core/range.cpp
     core/device.cpp
     core/bytes.cpp
+    core/operation.cpp
     platform/image/image_info.cpp
     platform/privileges.cpp
 )
@@ -45,6 +46,13 @@ platter_set_warnings(platter-partitions)
 add_library(platter-smart STATIC smart/smart.cpp)
 target_link_libraries(platter-smart PUBLIC platter-core PRIVATE nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-smart)
+
+# ------------------------------------------------------------- platter-surface
+add_library(platter-surface STATIC surface/surface_scan.cpp)
+target_link_libraries(platter-surface PUBLIC platter-core)
+find_package(Threads REQUIRED)
+target_link_libraries(platter-core PUBLIC Threads::Threads)
+platter_set_warnings(platter-surface)
 
 # ------------------------------------------------------------- platter-reports
 add_library(platter-reports STATIC reports/json.cpp)

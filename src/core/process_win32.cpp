@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Proprietary
 #include <windows.h>
 
-#include <thread>
+#include <algorithm>
+#include <chrono>
 
 #include "platter/core/process.hpp"
 #include "../platform/windows/win32_util.hpp"
@@ -35,11 +36,14 @@ std::wstring quote_arg(const std::wstring& a) {
     return q;
 }
 
-void drain(HANDLE h, std::string& sink, std::size_t max) {
+bool drain(HANDLE h, std::string& sink, std::size_t max) {
+    DWORD available = 0;
+    if (!PeekNamedPipe(h, nullptr, 0, nullptr, &available, nullptr) || available == 0) return false;
     char buf[8192];
     DWORD n = 0;
-    while (ReadFile(h, buf, sizeof buf, &n, nullptr) && n > 0)
-        if (sink.size() < max) sink.append(buf, std::min<std::size_t>(n, max - sink.size()));
+    if (!ReadFile(h, buf, std::min<DWORD>(available, sizeof buf), &n, nullptr) || n == 0) return false;
+    if (sink.size() < max) sink.append(buf, std::min<std::size_t>(n, max - sink.size()));
+    return true;
 }
 
 }  // namespace
@@ -89,14 +93,30 @@ Result<ProcessResult> run_process(const std::vector<std::string>& argv, std::chr
     herr_w.reset();
 
     ProcessResult res;
-    std::thread t_out([&] { drain(out_r, res.out, max_output); });
-    std::thread t_err([&] { drain(err_r, res.err, max_output); });
-    const DWORD wait = WaitForSingleObject(proc.get(), static_cast<DWORD>(timeout.count()));
-    if (wait == WAIT_TIMEOUT) TerminateProcess(proc.get(), 1);
-    t_out.join();
-    t_err.join();
-    if (wait == WAIT_TIMEOUT)
-        return Error{Errc::timeout, argv[0] + " did not finish within " + std::to_string(timeout.count()) + " ms"};
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    for (;;) {
+        drain(out_r, res.out, max_output);
+        drain(err_r, res.err, max_output);
+        const DWORD wait = WaitForSingleObject(proc.get(), 0);
+        if (wait == WAIT_OBJECT_0) break;
+        if (wait == WAIT_FAILED) {
+            auto error = win32::last_error("WaitForSingleObject");
+            TerminateProcess(proc.get(), 1);
+            return error;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            TerminateProcess(proc.get(), 1);
+            return Error{Errc::timeout, argv[0] + " did not finish within " + std::to_string(timeout.count()) +
+                                      " ms; check the USB adapter and SMART device type"};
+        }
+        Sleep(1);
+    }
+    // Drain buffered output without waiting on inherited handles in descendants.
+    for (int i = 0; i < 256; ++i) {
+        const bool out = drain(out_r, res.out, max_output);
+        const bool err = drain(err_r, res.err, max_output);
+        if (!out && !err) break;
+    }
     DWORD code = 0;
     GetExitCodeProcess(proc.get(), &code);
     res.exit_code = static_cast<int>(code);

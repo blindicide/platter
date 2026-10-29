@@ -207,3 +207,16 @@ TEST_CASE("smart::query runs a read-only smartctl invocation", "[smart][process]
     CHECK(args == "--json=c\n-a\n/dev/sdq\n");
 }
 #endif
+
+#ifdef _WIN32
+TEST_CASE("Windows process capture is bounded on timeout", "[process]") {
+    const auto start = std::chrono::steady_clock::now();
+    auto result = run_process({"cmd.exe", "/c", "ping -n 30 127.0.0.1 >nul"}, std::chrono::milliseconds(100));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Errc::timeout);
+    CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(3));
+    auto output = run_process({"cmd.exe", "/c", "echo hello"}, std::chrono::seconds(3));
+    REQUIRE(output);
+    CHECK(output->out.find("hello") != std::string::npos);
+}
+#endif

@@ -147,8 +147,10 @@ const std::set<std::string> kValueOptions = {
     "--thresholds", "--csv", "--report", "--test", "--qd", "--duration", "--size", "--points", "--point-size",
     "--sizes", "--qds", "--history-db", "--limit",
     // destructive commands
-    "--method", "--passes", "--pattern", "--verify", "--confirm", "--range", "--label", "--mode"};
-const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run"};
+    "--method", "--passes", "--pattern", "--verify", "--confirm", "--range", "--label", "--mode",
+    "--table", "--offset", "--type", "--name", "--attributes", "--fs", "--partition", "--cluster-size"};
+const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run",
+                                             "--bootable", "--no-bootable", "--logical", "--extended"};
 
 std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
     Options o;
@@ -960,9 +962,19 @@ int main(int argc, char** argv) {
         return usage_error("unknown devices subcommand '" + *arg(1) + "'");
     }
     if (cmd == "partitions") {
-        if (!arg(1) || *arg(1) != "list") return usage_error("usage: partitions list <device>");
-        if (!arg(2)) return usage_error("partitions list needs a <device>");
-        return cmd_partitions_list(*opts, *arg(2));
+        const char* usage = "usage: partitions list|init|add|delete|set|resize <device> ... | partitions types";
+        if (!arg(1)) return usage_error(usage);
+        const std::string sub = *arg(1);
+        if (sub == "types") return cmd_partitions_types(*opts);
+        if (!arg(2)) return usage_error("partitions " + sub + " needs a <device>");
+        std::vector<std::string> rest(opts->positional.begin() + 3, opts->positional.end());
+        if (sub == "list") return cmd_partitions_list(*opts, *arg(2));
+        if (sub == "init") return cmd_partitions_init(*opts, *arg(2));
+        if (sub == "add") return cmd_partitions_add(*opts, *arg(2));
+        if (sub == "delete") return cmd_partitions_delete(*opts, *arg(2), rest);
+        if (sub == "set") return cmd_partitions_set(*opts, *arg(2), rest);
+        if (sub == "resize") return cmd_partitions_resize(*opts, *arg(2), rest);
+        return usage_error(usage);
     }
     if (cmd == "surface") {
         if (!arg(1) || *arg(1) != "scan") return usage_error("usage: surface scan <device>");
@@ -993,6 +1005,10 @@ int main(int argc, char** argv) {
             return cmd_erase_show(*opts, *arg(2));
         }
         return usage_error("usage: erase run <device> | erase methods | erase history | erase show <id>");
+    }
+    if (cmd == "format") {
+        if (!arg(1)) return usage_error("format needs a <device>");
+        return cmd_format(*opts, *arg(1));
     }
     if (cmd == "smart") {
         if (!arg(1) || *arg(1) != "show") return usage_error("usage: smart show <device>");

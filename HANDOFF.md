@@ -36,12 +36,46 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.4 Erase + write tests — feature-complete in code, never run on
-real hardware** (see "v0.4 so far"). Previously: **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.5 Partition editing + FAT32/exFAT format — feature-complete in code,
+never run on real hardware** (see "v0.5 so far"). Previously: **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.5 so far
+- **Partition planning/editing** `include/platter/partitions/partition_edit.hpp`,
+  `src/partitions/partition_edit.cpp`: `PartitionPlan` (blank / from_table /
+  from_device; add, remove, set_*, resize; problems() vs warnings(); diff();
+  encode() = exact sector images; metadata_ranges() = confirmed ranges) and
+  `apply_plan(AuthorizedTarget&, plan)` (writes, flushes, reads back, asks the OS
+  to re-read). GPT: 128x128-byte entries, protective MBR, backup header at the
+  last LBA. MBR: 4 primaries, one extended container (0x0F), EBR chain (first EBR
+  at the container start, later ones at logical.first-1, link offsets relative
+  to the container), boot code preserved. add/resize are rolled back if they
+  introduce new problems. Tests: `tests/unit/test_partition_edit.cpp`
+  (validated by hand against sfdisk/fdisk on images).
+- **Native mkfs** `include/platter/mkfs/mkfs.hpp`, `src/mkfs/mkfs.cpp`
+  (`src/mkfs/upcase_table.inc` = exFAT up-case table): FAT32 (32 reserved
+  sectors, 2 FATs, FSInfo, backup boot at 6, cluster size from the MS table,
+  needs >= 65525 clusters) and exFAT (boot region + backup with checksum sector,
+  bitmap, generated up-case table, root). Quick format only; boot sector written
+  last (old boot area zeroed first); metadata read back. Validated with
+  `fsck.vfat` / `fsck.exfat` for 512 and 4096-byte sectors (manual; tests parse
+  the fields themselves). Tests: `tests/unit/test_mkfs.cpp`.
+- `read_partition_table()` now recognizes a FAT/exFAT/NTFS boot record at LBA 0
+  and reports TableType::none + a warning instead of misparsing it as MBR.
+- `IBlockDevice::reread_partitions()` (BLKRRPART on Linux; Windows
+  IOCTL_DISK_UPDATE_PROPERTIES). Windows `Win32FileDevice` now locks+dismounts
+  all volumes on the disk before write access (compile-only checked, never run).
+- CLI: `partitions types|init|add|delete|set|resize`, `format`
+  (`src/cli/cmd_partitions.cpp`, `cmd_format.cpp`; shared `authorize_from_cli`).
+- GUI: `src/gui/widgets/partition_editor.{hpp,cpp}` — dialog opened from the
+  PARTITIONS tab ("Edit Partitions..."): staged edits with live validation and
+  diff, Apply and Format each go through `confirm_and_authorize`. Dev aid:
+  `platter-gui --editor-screenshot FILE image.img` (offscreen).
+- Not done / limits: no file system or data moving on resize; no NTFS/ext4
+  creation; the GUI editor was only exercised offscreen.
 
 ### v0.4 so far
 - **Safety gate** `include/platter/core/safety.hpp`, `src/core/safety.cpp`:
@@ -333,7 +367,7 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. v0.5 partition editing and filesystem creation, then v0.6 imaging/cloning,
+2. v0.6 imaging/cloning,
    v0.7 hex inspector / qualification / history browser, v0.8 privilege
    separation, v0.9 settings and polish, v1.0 release prep (see sections below
    as they get filled in).

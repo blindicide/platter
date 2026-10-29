@@ -170,6 +170,14 @@ public:
         return {};
     }
 
+    Status reread_partitions() override {
+        if (mode_ != OpenMode::read_write) return Error{Errc::read_only, "device was opened read-only"};
+        DWORD ret = 0;
+        if (!DeviceIoControl(h_.get(), IOCTL_DISK_UPDATE_PROPERTIES, nullptr, 0, nullptr, 0, &ret, nullptr))
+            return win32::last_error("IOCTL_DISK_UPDATE_PROPERTIES");
+        return {};
+    }
+
 private:
     Result<IOResult> transfer(std::uint64_t offset, char* buf, std::size_t length, bool writing) {
         constexpr std::size_t kMaxChunk = std::size_t{1} << 30;  // DWORD-safe, sector-aligned

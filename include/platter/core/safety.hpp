@@ -149,6 +149,8 @@ public:
     Result<IOResult> write(std::uint64_t offset, const void* buffer, std::size_t length);
     Status discard(std::uint64_t offset, std::uint64_t length);
     Status flush() { return dev_->flush(); }
+    // Best-effort: ask the OS to re-read the partition table.
+    Status reread_partition_table() { return dev_->reread_partitions(); }
     // Reads are allowed anywhere (partition tables, verification).
     Result<IOResult> read(std::uint64_t offset, void* buffer, std::size_t length) {
         return dev_->read(offset, buffer, length);

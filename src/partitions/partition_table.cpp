@@ -346,6 +346,23 @@ void validate_layout(PartitionTable& t) {
                                  std::to_string(v[i]->number) + " overlap");
 }
 
+// Recognizes a filesystem boot sector at LBA 0. Returns its name or nullptr.
+const char* volume_boot_record_name(const std::vector<std::uint8_t>& s) {
+    if (s.size() < 512) return nullptr;
+    auto at = [&](std::size_t off, const char* text) {
+        return std::memcmp(s.data() + off, text, std::strlen(text)) == 0;
+    };
+    if (at(3, "EXFAT   ")) return "exFAT";
+    if (at(3, "NTFS    ")) return "NTFS";
+    const bool jump = s[0] == 0xEB || s[0] == 0xE9;
+    const unsigned bps = s[11] | (s[12] << 8);
+    const bool bps_ok = bps >= 512 && bps <= 4096 && (bps & (bps - 1)) == 0;
+    if (!jump || !bps_ok) return nullptr;
+    if (at(82, "FAT32   ")) return "FAT32";
+    if (at(54, "FAT12   ") || at(54, "FAT16   ") || at(54, "FAT     ")) return "FAT12/16";
+    return nullptr;
+}
+
 }  // namespace
 
 Result<PartitionTable> read_partition_table(IBlockDevice& dev) {
@@ -410,6 +427,13 @@ Result<PartitionTable> read_partition_table(IBlockDevice& dev) {
 
     // ---- MBR
     if (!mbr_sig) return t;  // unpartitioned (or unknown scheme)
+    if (const char* fs = volume_boot_record_name(*mbr)) {
+        // A filesystem formatted straight onto the device ("superfloppy"): the 0x55AA
+        // signature is the boot record's, not an MBR's, and its bytes are no partitions.
+        t.warnings.push_back(std::string("sector 0 holds a ") + fs +
+                             " volume boot record, not a partition table (unpartitioned device)");
+        return t;
+    }
     t.type = TableType::mbr;
     t.mbr_disk_signature = le32(mbr->data() + 440);
     std::vector<Partition> extended;

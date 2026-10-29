@@ -23,6 +23,10 @@ platter-cli [options] <command> [arguments]
 | `erase run <device>` | **Destructive.** Overwrite erase with `--method`, `--verify`, optional `--range`/`--start`/`--end`, `--report FILE`, `--save`. See below. | Yes |
 | `erase methods` | Lists the methods and their pass counts. | No |
 | `erase history` / `erase show <id>` | Saved erase sessions and their full reports. | No |
+| `partitions types` | Lists the type names accepted by `--type`. | No |
+| `partitions init <device> --table gpt\|mbr` | **Destructive.** Writes a new, empty partition table. | Yes |
+| `partitions add\|delete\|set\|resize <device> ...` | **Destructive.** Edits the existing table. See below. | Yes |
+| `format <device> --fs fat32\|exfat [--partition N]` | **Destructive.** Native quick format. See below. | Yes |
 | `benchmark history [<device>]` | Lists saved benchmark sessions (newest first), optionally for one device. | No |
 | `benchmark show <id>` | Re-prints a saved session (text, or JSON with `--json`; `--chart` works too). | No |
 | `smart show <device>` | Runs `smartctl --json=c -a` and prints attributes / NVMe health log plus a conservative assessment with every contributing observation. | Usually yes |
@@ -177,3 +181,43 @@ Windows. Hardware secure erase is not offered.
 `benchmark read --test write-seq|write-random` (the subcommand keeps its name)
 use the same options as their read counterparts, plus `--confirm`, `--dry-run`
 and `--pattern`. Write benchmarks require an explicit `--start` and `--end`.
+
+### Partition editing
+
+Every edit rewrites the whole table (all copies, all EBRs) from an in-memory
+plan, then flushes, reads each region back and compares. The confirmed ranges
+are exactly the table areas (e.g. LBA 0-33 and the last 33 LBAs for GPT with
+512-byte sectors), so nothing else on the disk can be touched. The planned
+diff is printed before the confirmation.
+
+| Command | Meaning |
+|---|---|
+| `partitions init <device> --table gpt\|mbr` | New empty table; existing partitions are forgotten (data is not erased) |
+| `partitions add <device> [--size 20G\|max] [--offset 1M] [--type NAME\|GUID] [--name N] [--bootable] [--logical] [--extended] [--attributes N]` | Adds a partition in the first free 1 MiB-aligned space (`max` = fill the free span) |
+| `partitions delete <device> N` | Removes entry N |
+| `partitions set <device> N [--type T] [--name N] [--bootable\|--no-bootable] [--attributes N]` | Changes metadata only |
+| `partitions resize <device> N --start LBA --end LBA` | New bounds. **The file system and its data are not moved or resized.** |
+
+Edits that would make the table invalid (overlap, out of bounds, too many
+primaries, ...) are refused before anything is written. After writing, platter
+asks the OS to re-read the table (`BLKRRPART` / `IOCTL_DISK_UPDATE_PROPERTIES`);
+if a partition is still in use that is reported as a note, not an error.
+GPT partition number = table slot; MBR logicals are numbered from 5.
+
+### `format <device> --fs fat32|exfat`
+
+| Option | Meaning |
+|---|---|
+| `--fs fat32\|exfat` | Required. ext4, NTFS etc. are not implemented natively; use the platform tools. |
+| `--partition N` | Partition to format. Without it only a device with no partition table (or an image) is accepted. |
+| `--label TEXT` | FAT32: up to 11 characters (uppercased); exFAT: up to 11 characters |
+| `--cluster-size SIZE` | Power of two (`4K`...`32M`); default is chosen from the volume size |
+| `--confirm TEXT`, `--dry-run` | As above |
+
+This is a **quick format**: only boot sectors, FATs / allocation bitmap, up-case
+table and the root directory are written, inside the partition. The data area
+is not erased, so old files stay recoverable until overwritten (use `erase run`
+first if that matters). The boot sector is written last, a half-finished format
+is therefore not recognizable as a volume, and the metadata is read back and
+compared afterwards. FAT32 volumes need at least 65525 clusters (about 33 MiB
+with 512-byte clusters).

@@ -6,12 +6,15 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.4 (erase + write tests).** Destructive operations exist and go
+> **Status: v0.5 (partition editing + FAT32/exFAT formatting).** Destructive operations exist and go
 > through a typed-confirmation safety gate, but have only ever been run against
 > image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
 ## What works today
+
+- Partition table editing (GPT and MBR incl. extended/logical) and native
+  quick FAT32 / exFAT formatting, in the CLI and in the GUI partition manager
 
 - Device discovery on Linux (sysfs, /proc) and Windows (zero-access
   `\\.\PhysicalDriveN` queries), with mount / swap / dm-crypt / LVM /

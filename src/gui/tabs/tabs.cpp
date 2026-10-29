@@ -302,8 +302,11 @@ PartitionsTab::PartitionsTab(QWidget* parent) : QWidget(parent) {
     auto* row = compact_row();
     read_ = new QPushButton(tr("&Read Partition Table"), this);
     read_->setToolTip(tr("Reads LBA 0-33 and the backup GPT (read-only)"));
+    edit_ = new QPushButton(tr("&Edit Partitions..."), this);
+    edit_->setToolTip(tr("Create or change the partition table and format partitions. Nothing is written without a typed confirmation."));
     summary_ = new QLabel(this);
     row->addWidget(read_);
+    row->addWidget(edit_);
     row->addWidget(summary_, 1);
     col->addLayout(row);
 
@@ -328,6 +331,7 @@ PartitionsTab::PartitionsTab(QWidget* parent) : QWidget(parent) {
     col->addWidget(split, 1);
 
     connect(read_, &QPushButton::clicked, this, &PartitionsTab::readRequested);
+    connect(edit_, &QPushButton::clicked, this, &PartitionsTab::editRequested);
     connect(bar_, &PartitionBar::partitionClicked, this, [this](int number) {
         for (int r = 0; r < parts_->rowCount(); ++r)
             if (parts_->item(r, 0)->data(Qt::UserRole).toInt() == number) parts_view_->selectRow(r);
@@ -337,6 +341,7 @@ PartitionsTab::PartitionsTab(QWidget* parent) : QWidget(parent) {
 
 void PartitionsTab::setBusy(bool busy) {
     read_->setEnabled(!busy);
+    edit_->setEnabled(!busy);
     if (busy) summary_->setText(tr("Reading..."));
 }
 
@@ -344,6 +349,7 @@ void PartitionsTab::setDevice(const DeviceEntry* e) {
     parts_->removeRows(0, parts_->rowCount());
     warnings_->clear();
     read_->setEnabled(e != nullptr);
+    edit_->setEnabled(e != nullptr);
     bar_->setTable(e ? e->table : std::nullopt);
     if (!e) {
         summary_->setText(tr("No device selected."));

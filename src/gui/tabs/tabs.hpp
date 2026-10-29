@@ -63,9 +63,11 @@ public:
 
 signals:
     void readRequested();
+    void editRequested();
 
 private:
     QPushButton* read_;
+    QPushButton* edit_;
     QLabel* summary_;
     PartitionBar* bar_;
     QStandardItemModel* parts_;

@@ -88,6 +88,19 @@ Further rules for the engines on top (erase, write benchmarks, write scans):
 No destructive operation may start automatically at startup, from a saved
 session, or from anything but a fresh, explicit user action.
 
+## Partition edits and formats (v0.5)
+
+`Kind::partition_edit` is confirmed for exactly `PartitionPlan::metadata_ranges()`
+(the table areas, never partition data); `Kind::filesystem_create` for exactly
+one range, the volume. `apply_plan()` and `mkfs::Format` refuse any other kind,
+geometry mismatch or extra range, and the `AuthorizedTarget` itself rejects
+writes outside the confirmed ranges, so a bug in the planner cannot reach other
+sectors. Formatting only ever writes metadata; it never claims to erase data.
+On Windows the device first locks and dismounts every volume that lives on the
+disk (`FSCTL_LOCK_VOLUME`, `FSCTL_DISMOUNT_VOLUME`) and fails if one is busy.
+The GUI partition manager stages edits in memory and goes through the same
+typed-confirmation dialog as erase.
+
 ## Testing rules
 
 - Unit and integration tests use sparse image files in temp directories.

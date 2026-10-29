@@ -43,9 +43,14 @@ target_compile_features(platter-core PUBLIC cxx_std_20)
 platter_set_warnings(platter-core)
 
 # ---------------------------------------------------------- platter-partitions
-add_library(platter-partitions STATIC partitions/partition_table.cpp)
+add_library(platter-partitions STATIC partitions/partition_table.cpp partitions/partition_edit.cpp)
 target_link_libraries(platter-partitions PUBLIC platter-core)
 platter_set_warnings(platter-partitions)
+
+# ---------------------------------------------------------------- platter-mkfs
+add_library(platter-mkfs STATIC mkfs/mkfs.cpp)
+target_link_libraries(platter-mkfs PUBLIC platter-core)
+platter_set_warnings(platter-mkfs)
 
 # --------------------------------------------------------------- platter-smart
 add_library(platter-smart STATIC smart/smart.cpp)
@@ -84,9 +89,9 @@ platter_set_warnings(platter-storage)
 
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
-    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp)
+    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
-        platter-benchmark platter-erase platter-reports platter-storage)
+        platter-benchmark platter-erase platter-mkfs platter-reports platter-storage)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()
@@ -107,6 +112,7 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/surface_map.cpp
         gui/widgets/chart.cpp
         gui/widgets/confirm_dialog.cpp
+        gui/widgets/partition_editor.cpp
         gui/mainwindow/main_window.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
@@ -121,7 +127,7 @@ if(PLATTER_BUILD_GUI)
     )
     target_link_libraries(platter-gui PRIVATE
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
-        platter-erase platter-reports platter-storage)
+        platter-erase platter-mkfs platter-reports platter-storage)
     platter_set_warnings(platter-gui)
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

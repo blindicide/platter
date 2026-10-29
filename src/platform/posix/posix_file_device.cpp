@@ -96,6 +96,16 @@ public:
 #endif
     }
 
+    Status reread_partitions() override {
+#ifdef __linux__
+        if (info_.bus == BusType::image) return {};
+        if (::ioctl(fd_, BLKRRPART) != 0) return os_error("ioctl(BLKRRPART)", errno);
+        return {};
+#else
+        return Error{Errc::unsupported, "re-reading partitions is only implemented on Linux"};
+#endif
+    }
+
 private:
     Result<IOResult> transfer(std::uint64_t offset, char* buf, std::size_t length, bool writing) {
         IOResult res;

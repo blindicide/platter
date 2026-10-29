@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: TBD
 #include "main_window.hpp"
 
+#include "../widgets/partition_editor.hpp"
+
 #include <QAction>
 #include <QApplication>
 #include <QBoxLayout>
@@ -332,6 +334,7 @@ void MainWindow::buildCentral() {
     tabs_->addTab(log_tab_, tr("LOG"));
     connect(smart_tab_, &SmartTab::queryRequested, this, &MainWindow::querySmart);
     connect(part_tab_, &PartitionsTab::readRequested, this, &MainWindow::readPartitions);
+    connect(part_tab_, &PartitionsTab::editRequested, this, &MainWindow::editPartitions);
 
     auto* actbox = new QGroupBox(tr("Activity Log"), vsplit_);
     auto* al = new QVBoxLayout(actbox);
@@ -709,6 +712,32 @@ void MainWindow::readPartitions() {
             },
             Qt::QueuedConnection);
     });
+}
+
+void MainWindow::editPartitions() {
+    auto* e = current();
+    if (!e || busy_parts_) return;
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning()) {
+        QMessageBox::information(this, tr("Partition Manager"), tr("Wait for the running operation to finish first."));
+        return;
+    }
+    EditorTarget t;
+    t.path = qs(e->info.path);
+    t.label = e->displayName();
+    t.is_image = e->is_image;
+    t.sector_size = e->is_image ? e->image_sector_size : e->info.logical_sector_size;
+    t.show_serial = show_serials_;
+    const std::string path = e->info.path;
+    PartitionEditorDialog dlg(t, this);
+    connect(&dlg, &PartitionEditorDialog::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
+    connect(&dlg, &PartitionEditorDialog::tableWritten, this, [this] {
+        readPartitionsNow();
+        showCurrent();
+    });
+    dlg.exec();
+    readPartitionsNow();
+    showCurrent();
 }
 
 void MainWindow::saveReport() {

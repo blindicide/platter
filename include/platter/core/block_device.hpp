@@ -62,6 +62,13 @@ public:
         return Error{Errc::unsupported, "discard is not supported by this backend"};
     }
 
+    // Asks the OS to re-read the partition table after it was rewritten
+    // (BLKRRPART / IOCTL_DISK_UPDATE_PROPERTIES). Best effort: fails when a
+    // partition is still in use; images have nothing to re-read.
+    virtual Status reread_partitions() {
+        return Error{Errc::unsupported, "re-reading partitions is not supported by this backend"};
+    }
+
     // Alignment the caller must honour for offsets and lengths.
     virtual std::uint32_t required_alignment() const noexcept = 0;
 

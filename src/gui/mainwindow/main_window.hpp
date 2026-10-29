@@ -55,6 +55,7 @@ private slots:
     void onDeviceSelected(int index);
     void querySmart();
     void readPartitions();
+    void editPartitions();
     void openImageDialog();
     void saveReport();
     void about();

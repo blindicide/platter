@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "common.hpp"
 
@@ -13,5 +14,16 @@ int cmd_erase_run(const Options& o, const std::string& target);
 int cmd_erase_methods(const Options& o);
 int cmd_erase_history(const Options& o);
 int cmd_erase_show(const Options& o, const std::string& id_text);
+
+// cmd_partitions.cpp
+int cmd_partitions_types(const Options& o);
+int cmd_partitions_init(const Options& o, const std::string& target);
+int cmd_partitions_add(const Options& o, const std::string& target);
+int cmd_partitions_delete(const Options& o, const std::string& target, const std::vector<std::string>& rest);
+int cmd_partitions_set(const Options& o, const std::string& target, const std::vector<std::string>& rest);
+int cmd_partitions_resize(const Options& o, const std::string& target, const std::vector<std::string>& rest);
+
+// cmd_format.cpp
+int cmd_format(const Options& o, const std::string& target);
 
 }  // namespace platter::cli

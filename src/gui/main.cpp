@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "mainwindow/main_window.hpp"
+#include "widgets/partition_editor.hpp"
 #include "tabs/benchmark_tab.hpp"
 #include "tabs/surface_tab.hpp"
 #include "platter/version.hpp"
@@ -42,9 +43,27 @@ int main(int argc, char** argv) {
                                   QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption compare({QStringLiteral("compare")}, QStringLiteral("Compare with saved benchmark #id."),
                                QStringLiteral("id"));
-    cli.addOptions({sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+    QCommandLineOption editor_shot({QStringLiteral("editor-screenshot")},
+                                   QStringLiteral("Render the partition manager for the first image to FILE and exit."),
+                                   QStringLiteral("file"));
+    cli.addOptions({editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
                     compare});
     cli.process(app);
+
+    if (cli.isSet(editor_shot) && !cli.positionalArguments().isEmpty()) {
+        platter::gui::EditorTarget t;
+        t.path = cli.positionalArguments().first();
+        t.label = t.path;
+        t.is_image = true;
+        t.sector_size = cli.value(sector).toUInt() == 4096 ? 4096u : 512u;
+        platter::gui::PartitionEditorDialog dlg(t);
+        dlg.show();
+        QTimer::singleShot(300, &dlg, [&dlg, &cli, &editor_shot] {
+            dlg.grab().save(cli.value(editor_shot));
+            QApplication::quit();
+        });
+        return QApplication::exec();
+    }
 
     platter::gui::MainWindow w;
     const auto ss = cli.value(sector).toUInt() == 4096 ? 4096u : 512u;

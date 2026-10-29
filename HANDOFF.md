@@ -36,12 +36,23 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.9 Preferences / help / polish — complete in code, GUI only exercised offscreen**
-(see "v0.9 so far"). Previously: **v0.8 Privilege separation (Linux helper)**, **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v1.0 release prep — feature-complete, hardware validation + license pending**
+(see "v1.0 so far"). Previously: **v0.9 Preferences / help / polish**, **v0.8 Privilege separation (Linux helper)**, **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v1.0 so far
+- Version 1.0.0 means **feature-complete**, NOT hardware-validated: see docs/release-checklist.md
+  (license decision + real-hardware runs on the owner's disposable drives are still open). Do not tag or
+  publish a release until those are done. No git tag has been created.
+- `cmake --install` installs bin/, libexec/platter/platter-helper, docs, desktop file and a polkit policy
+  generated at install time with the real helper path (`install(CODE ...)` in CMakeLists.txt);
+  CPack builds a tar.gz (Linux) / zip (Windows, untested). The Windows zip does not bundle Qt: CI's
+  `windeployqt` "Package" step does.
+- CHANGELOG.md added. License is still TBD (SPDX tags say TBD) — only the owner can decide.
+- No code changes beyond v0.9 in behaviour.
 
 ### v0.9 so far
 - **Preferences** (`src/gui/widgets/preferences_dialog.*`, Settings > Preferences; `Preferences` struct
@@ -463,8 +474,7 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. (v0.9 done) v1.0 release prep (see sections below
-   as they get filled in).
+2. (v1.0 prepared) Decide the license, then work through docs/release-checklist.md.
 
 ## 3. Layout
 

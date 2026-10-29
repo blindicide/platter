@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=platter
+GenericName=Storage Operations Suite
+Comment=Storage diagnostics, maintenance and management
+Exec=platter-gui
+Terminal=false
+Categories=System;Utility;
+Keywords=disk;hdd;ssd;smart;benchmark;partition;

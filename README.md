@@ -6,9 +6,9 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v1.1.0 (feature-complete, awaiting hardware validation).** Destructive operations exist and go
-> through a typed-confirmation safety gate, but have only ever been run against
-> image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
+> **Status: v1.1.2.** Destructive operations exist and go
+> through a typed-confirmation safety gate, and the owner reports that hardware validation has mostly succeeded. The Windows USB-to-SATA
+> SMART hang remains under investigation. Automated tests use images and test doubles. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
 ## What works today
@@ -118,6 +118,6 @@ docs/              architecture, safety model, CLI reference, privilege separati
 
 ## License
 
-To be decided by the author. Third-party: Qt 6 (LGPL v3), nlohmann/json (MIT),
+Copyright (c) 2026 Ruslan Yakunin. All rights reserved. See [LICENSE](LICENSE). Third-party: Qt 6 (LGPL v3), nlohmann/json (MIT),
 SQLite (public domain; vendored copy in third_party/), Catch2 (BSL-1.0, tests only); smartmontools (GPL v2) is invoked as an external
 program and not linked.

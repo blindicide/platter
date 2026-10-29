@@ -92,12 +92,16 @@ jobs:
             test -s "dlg-$d.png"
           done
 
+      - name: Release archive
+        run: |
+          cmake --install build --prefix "$PWD/build/stage"
+          (cd build && cpack -G TGZ)
+
       - uses: actions/upload-artifact@v4
         with:
           name: platter-linux-x86_64
           path: |
-            build/src/platter-cli
-            build/src/platter-gui
+            build/platter-*.tar.gz
             gui-linux.png
             partitions.json
 
@@ -147,6 +151,8 @@ jobs:
         run: |
           mkdir -p dist/platter
           cp build/src/Release/platter-cli.exe build/src/Release/platter-gui.exe dist/platter/
+          cp LICENSE README.md CHANGELOG.md dist/platter/
+          cp -r docs packaging/licenses dist/platter/
           windeployqt --release --translations ru --no-opengl-sw dist/platter/platter-gui.exe
 
       # smartmontools (GPL-2.0-or-later) is shipped unmodified as a separate program that platter
@@ -157,16 +163,20 @@ jobs:
           SM="/c/Program Files/smartmontools"
           mkdir -p dist/platter/smartmontools
           cp "$SM/bin/smartctl.exe" dist/platter/smartmontools/
-          cp "$SM"/doc/COPYING* dist/platter/smartmontools/ 2>/dev/null || true
+          cp packaging/licenses/GPL-2.txt dist/platter/smartmontools/COPYING.txt
+          find "$SM" -iname drivedb.h -exec cp '{}' dist/platter/smartmontools/ \;
           cp packaging/windows/SMARTMONTOOLS.txt dist/platter/smartmontools/README.txt
           dist/platter/smartmontools/smartctl.exe --version | head -3
           ls dist/platter/smartmontools
+
+      - name: Zip release
+        run: 7z a platter-1.1.2-windows-x64.zip ./dist/platter
 
       - uses: actions/upload-artifact@v4
         with:
           name: platter-windows-x64
           path: |
-            dist/platter
+            platter-1.1.2-windows-x64.zip
             gui-windows.png
 
   windows-cross:

@@ -2,15 +2,23 @@
 
 platter follows semantic versioning from 1.0. Before 1.0 each milestone was a minor version.
 
+## 1.1.2
+
+- Reject overflowing erase LBA values instead of interpreting failed conversions as zero.
+- Resynchronize Erase, Surface and Benchmark targets after an operation finishes, and reset
+  LBA ranges when switching devices or sector sizes.
+- Add a SMART device-type selector in the GUI (Auto, SAT variants, SCSI, JMicron).
+- Bound Windows process output collection so inherited output handles cannot defeat the timeout.
+- Platter's own code is proprietary, all rights reserved; third-party licenses remain unchanged.
+- Hardware validation has mostly succeeded according to the owner. The reported Windows USB 3.0
+  to SATA SMART hang still needs confirmation with this build; adapter compatibility is not guaranteed.
+
 ## 1.1.0
 
 - Mounted volumes on Windows no longer hard-refuse a destructive operation: the confirmation dialog
   shows them and needs an extra tick ("I understand ... will be locked and dismounted"); the CLI needs
   `--dismount-volumes`. The Windows backend already locks and dismounts the disk's volumes and aborts
   if one is in use. On Linux, and for the system disk and encryption/RAID holders, it stays a refusal.
-- Erase, Surface and Benchmark tabs have a "Partition..." button that fills Start/End LBA from a
-  partition (or the whole device). It uses the partition table already read in the Partitions tab
-  and reads nothing from the device itself.
 - Erase, Surface and Benchmark tabs have a "Partition..." button that fills Start/End LBA from a
   partition (or the whole device). It uses the partition table already read in the Partitions tab
   and reads nothing from the device itself.

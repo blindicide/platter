@@ -1,13 +1,12 @@
 # Release checklist
 
-platter 1.1.0 is feature-complete, but a public release should wait for the items below. Everything
-destructive has so far been exercised only against image files, fault-injecting test doubles and
-temporary files.
+platter 1.1.2: the owner reports hardware validation has mostly succeeded and has authorized
+release preparation. Individual hardware checks below remain unrecorded unless explicitly confirmed.
+Windows USB-to-SATA SMART compatibility still needs testing with this build.
 
 ## Must decide
 
-- [ ] **License.** Still "to be decided by the author". Source files carry `SPDX-License-Identifier: TBD`.
-  Pick one, add `LICENSE`, replace the SPDX tags, update the README and the About > License dialog.
+- [x] **License.** Proprietary, all rights reserved. LICENSE, source headers, README and GUI updated.
 
 ## Hardware validation (disposable drives only, everything else unplugged)
 
@@ -25,7 +24,7 @@ Destructive, on a disposable HDD and a USB stick:
   check the helper's stderr shows the granted range and no refusals.
 - [ ] Removal during an operation (unplug the USB stick) is reported cleanly.
 
-Windows (nothing below the compile and CI-smoke level has been run):
+Windows (owner reports mostly successful hardware validation; details not yet recorded):
 - [ ] Everything above on Windows 10 and 11, as Administrator: enumeration, SMART (smartctl.exe), sector reads,
   locking/dismounting volumes before writes, `\\.\PhysicalDriveN` direct I/O alignment.
 - [ ] Windows installer / zip contents and a clean-machine start (Qt DLLs via `windeployqt`).

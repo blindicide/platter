@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(platter
-    VERSION 1.1.0
+    VERSION 1.1.2
     DESCRIPTION "Cross-platform storage diagnostics, maintenance and management utility"
     LANGUAGES C CXX)
 
@@ -29,7 +29,8 @@ if(PLATTER_BUILD_TESTS)
 endif()
 
 # ------------------------------------------------------------------ install
-install(FILES README.md CHANGELOG.md DESTINATION share/doc/platter)
+install(FILES README.md CHANGELOG.md LICENSE DESTINATION share/doc/platter)
+install(DIRECTORY packaging/licenses/ DESTINATION share/doc/platter/licenses)
 install(DIRECTORY docs/ DESTINATION share/doc/platter FILES_MATCHING PATTERN "*.md")
 if(UNIX AND NOT APPLE)
     # pkexec needs the exact installed path of the helper in its policy, so the

@@ -3,6 +3,18 @@
 Living notes for whoever (human or agent) picks this repo up next. Update this
 file after every significant change. Newest status at the top of each section.
 
+## 1.1.2 release update
+
+The owner reports hardware validation mostly works; Windows USB 3.0-to-SATA SMART hangs remain
+under investigation. No individual hardware checklist item is inferred as complete. License decision:
+Platter's own code is proprietary, all rights reserved (LICENSE). Repository archival is planned after
+further builds, not part of this release. Historical status notes below may describe older limitations.
+
+1.1.2 checks erase LBA conversions, clears ranges on device changes, resynchronizes operation-tab
+targets after completion, exposes SMART adapter types and bounds Windows process pipe capture.
+The USB adapter workaround must be validated by the owner. Never access real hardware without
+explicit device-specific authorization.
+
 ## 0. Read this first: safety rules for agents
 
 - **Never run platter, smartctl, dd, or any other disk tool against real hardware

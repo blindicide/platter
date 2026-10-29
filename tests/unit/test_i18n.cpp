@@ -92,6 +92,7 @@ TEST_CASE("every blocker, warning and prompt of a real preview is translated", "
     safety::Request req;
     req.kind = safety::Kind::erase;
     req.target.path = d.path;
+    req.backend_dismounts_volumes = false;
     const auto p = safety::preview_for(d, req);
     REQUIRE_FALSE(p.blockers.empty());
     REQUIRE_FALSE(p.warnings.empty());

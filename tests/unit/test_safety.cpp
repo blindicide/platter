@@ -113,6 +113,7 @@ TEST_CASE("blockers: mounted, held, system disk, read-only", "[safety]") {
     Request req;
     req.kind = Kind::erase;
     req.target.path = "/dev/sdz";
+    req.backend_dismounts_volumes = false;  // the Windows default would make mounted volumes an acknowledgment
 
     auto clean = preview_for(fake_disk(), req);
     CHECK(clean.allowed());

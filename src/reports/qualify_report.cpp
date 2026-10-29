@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "platter/reports/qualify_report.hpp"
 
 #include <cstdio>

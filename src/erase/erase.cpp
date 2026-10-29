@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "platter/erase/erase.hpp"
 
 #include <algorithm>

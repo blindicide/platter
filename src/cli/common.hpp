@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Helpers shared by every platter-cli command file.
 #pragma once

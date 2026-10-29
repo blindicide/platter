@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Linux enumeration tests. They build a fake /sys, /dev/disk/by-id and
 // /proc/{mounts,swaps} in a temp directory; the real /sys is never read.

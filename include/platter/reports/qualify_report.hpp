@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Drive qualification reports. JSON carries a SHA-256 digest of its own body
 // (like erase and imaging reports); the text form is qualify::result_to_text().
 #pragma once

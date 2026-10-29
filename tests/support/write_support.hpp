@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Test doubles for the destructive code paths. Everything wraps an image
 // file in a temp directory; nothing here can touch a real device.

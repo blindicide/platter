@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Hex sector inspector (spec §13): classic offset / hex / ASCII rendering,
 // byte-pattern search over a device or image, and read-only interpreters for

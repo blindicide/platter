@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Overflow-safe LBA / byte-range arithmetic. Every I/O path in platter must
 // go through validate_io() before touching a device; see docs/safety.md.

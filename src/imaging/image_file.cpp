@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "platter/imaging/image_file.hpp"
 
 #include <algorithm>

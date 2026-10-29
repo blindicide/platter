@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Internal Win32 helpers shared by the Windows backend.
 #pragma once
 

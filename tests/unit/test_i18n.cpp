@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // The Russian translation of the phrases the core libraries produce. Built only
 // when Qt's linguist tools are available; loads the compiled .qm from the build tree.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Drive qualification (spec §12): a destructive burn-in that decides whether a
 // disk is fit for use. It runs, over the confirmed range,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Disk image files: raw (byte for byte) or a single zstd frame. Images are
 // written to "<name>.partial" and renamed only when complete, so an

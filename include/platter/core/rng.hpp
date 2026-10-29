@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // splitmix64: tiny, fast, and bit-identical on every platform (unlike the
 // std:: distributions, whose output is implementation-defined). Used wherever

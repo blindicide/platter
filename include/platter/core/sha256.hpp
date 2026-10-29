@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // SHA-256 (FIPS 180-4). Streaming; used for device-key hashing and, later,
 // image verification.
 #pragma once

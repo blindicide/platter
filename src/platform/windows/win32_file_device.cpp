@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Win32 implementation of IBlockDevice for image files and \\.\PhysicalDriveN.
 #include <windows.h>

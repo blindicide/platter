@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli hex <device> ...   hex dump of sectors with structure interpretation
 // platter-cli find <device> ...  byte pattern search

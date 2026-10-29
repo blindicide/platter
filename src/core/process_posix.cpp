@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>

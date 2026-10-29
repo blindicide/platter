@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Wire format between the unprivileged client and platter-helper. Internal.
 // Little-endian, length-prefixed frames over a stream socket; strictly

@@ -1,0 +1,9 @@
+Copyright (c) 2026 Ruslan Yakunin. All rights reserved.
+
+Platter is proprietary software. No permission is granted to use, copy, modify,
+distribute, sublicense, or sell this software except as separately authorized
+in writing by the copyright holder or as required by applicable law.
+
+Third-party components remain governed by their respective licenses. This
+notice does not replace or restrict the licenses of Qt, nlohmann/json, SQLite,
+zstd, Catch2, smartmontools, or other third-party components.

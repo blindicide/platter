@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Generated: simple (single code point) Unicode uppercase mapping of the BMP,
 // exFAT compressed form (0xFFFF, n = n identity-mapped code points).
 // Unicode data of Python 3.13.18.

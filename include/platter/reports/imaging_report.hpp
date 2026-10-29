@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Imaging / clone / verify reports. JSON carries a SHA-256 digest of its own
 // body (like erase reports); the text form is imaging::result_to_text().
 #pragma once

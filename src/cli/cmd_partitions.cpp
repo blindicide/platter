@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli partitions init|add|delete|set|resize|types: partition table
 // edits. Every edit is planned in memory, shown as a diff, and written only

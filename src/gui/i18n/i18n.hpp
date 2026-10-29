@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Translation support. English is the built-in language; Russian (and any
 // future language) is chosen in Settings > Preferences and applied at start-up.

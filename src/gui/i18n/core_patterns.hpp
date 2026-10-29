@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Messages produced by the core libraries that carry numbers, names or paths
 // ("a volume is mounted at /mnt/x"). Each entry is a regular expression over

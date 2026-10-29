@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Test helpers: disposable temp dirs and synthetic disk images. Everything
 // here writes ONLY to files under a fresh temp directory.

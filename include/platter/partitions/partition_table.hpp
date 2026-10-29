@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Read-only MBR / GPT inspection. Writing partition tables arrives in v0.5
 // and will live behind the destructive-operation safety pipeline.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Surface-scan export / import (spec §6.5). JSON is the canonical format and
 // can be loaded back for comparison; CSV has one row per tested block; the

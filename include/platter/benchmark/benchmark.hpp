@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Read benchmarks (spec §7.1, §7.3, §7.4) and write benchmarks (§7.2).
 // Write benchmarks destroy data in their region: they only run on a

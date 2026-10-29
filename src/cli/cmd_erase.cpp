@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli erase ... : overwrite erasure behind the safety pipeline.
 #include "commands.hpp"

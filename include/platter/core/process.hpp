@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Runs an external tool WITHOUT a shell (no injection surface): argv is passed
 // to execvp / CreateProcessW directly.

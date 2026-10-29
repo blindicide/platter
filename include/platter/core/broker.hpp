@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Optional indirection for opening physical devices. With no broker installed
 // open_device() talks to the OS directly. The privileged helper

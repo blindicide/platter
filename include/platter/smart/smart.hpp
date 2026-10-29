@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // SMART / NVMe health via smartmontools. platter does not issue SMART
 // commands itself; it runs `smartctl --json` (machine-readable output, spec

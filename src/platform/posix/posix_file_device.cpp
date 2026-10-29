@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // POSIX implementation of IBlockDevice. Used for image files on every POSIX
 // system and for block devices on Linux.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Internal: the concrete IBlockDevice used for both image files and (on
 // Linux) block devices. Windows has its own implementation with the same

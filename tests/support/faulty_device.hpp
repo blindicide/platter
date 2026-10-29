@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Test double: wraps a real (image) device and injects errors, fake
 // latencies, real delays, or a disappearing device. Used to exercise the

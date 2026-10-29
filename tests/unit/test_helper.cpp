@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Privilege separation. The helper is started as the current user against
 // temp image files (--allow-regular-files); nothing here opens a real device.

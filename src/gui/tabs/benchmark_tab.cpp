@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "../i18n/i18n.hpp"
 #include "benchmark_tab.hpp"
 #include "../widgets/confirm_dialog.hpp"

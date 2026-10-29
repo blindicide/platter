@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Pattern table for core messages with variable parts (see core_patterns.hpp). Hand-maintained.
 #include "core_patterns.hpp"
 

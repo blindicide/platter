@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli: command-line front end over the same core as the GUI.
 // Every command is read-only. See docs/cli-reference.md.

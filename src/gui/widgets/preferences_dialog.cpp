@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "preferences_dialog.hpp"
 
 #include "../i18n/i18n.hpp"

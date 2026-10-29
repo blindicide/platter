@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // JSON serialization shared by the CLI (--json) and GUI exports, so both
 // produce identical reports (spec §16.3).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Native "quick" formatting of FAT32 and exFAT volumes (spec §10).
 //

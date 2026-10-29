@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Linux block-device discovery from sysfs + /proc. Strictly metadata: no
 // device node is opened here.

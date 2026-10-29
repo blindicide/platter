@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Block-level surface scanning (spec §6). v0.2 implements READ only; VERIFY
 // and the destructive WRITE modes are rejected at validation time.

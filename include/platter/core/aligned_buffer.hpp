@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Heap buffer whose data pointer is aligned for direct (unbuffered) I/O.
 #pragma once

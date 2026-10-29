@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli format <device> [--partition N] --fs fat32|exfat: native quick
 // format of a partition (or of a whole partition-less device / image).

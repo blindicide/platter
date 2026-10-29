@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "platter/reports/imaging_report.hpp"
 
 #include "platter/core/sha256.hpp"

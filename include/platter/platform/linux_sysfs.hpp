@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Linux sysfs enumeration with injectable roots, so it can be unit-tested
 // against a fake tree (tests/fixtures/sysfs) instead of the real /sys.

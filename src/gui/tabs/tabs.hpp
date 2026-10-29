@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Operation tabs. Each tab renders a DeviceEntry and emits requests; the main
 // window owns all device access and runs it off the GUI thread.

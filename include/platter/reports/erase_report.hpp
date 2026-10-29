@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Erase report export / import (spec §9.6). JSON is canonical and carries a
 // SHA-256 digest of its own body so accidental edits are detectable; the text
 // form is the human-readable record.

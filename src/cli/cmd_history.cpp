@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli history list|show|delete: one browser over every saved session
 // (benchmarks, scans, SMART snapshots, erase, imaging and qualification).

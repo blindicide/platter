@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-helper: the privileged half of platter. Started by the user through
 // pkexec / sudo (or from a root shell) with --stdio; stdin/stdout are a

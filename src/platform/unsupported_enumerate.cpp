@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Fallback for platforms without a device backend (e.g. macOS). Image files
 // still work through open_image().
 #include "platter/platform/enumerate.hpp"

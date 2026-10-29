@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Windows device discovery. Every handle opened here uses ZERO access rights
 // (dwDesiredAccess = 0): enough for metadata IOCTLs, unable to read or write

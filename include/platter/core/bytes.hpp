@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Little-endian helpers and CRC32. On-disk structures (MBR, GPT, FAT, NTFS,
 // ext4) are little-endian regardless of host byte order.
 #pragma once

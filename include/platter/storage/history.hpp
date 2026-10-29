@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Persistent operation history in SQLite (spec §14.2): benchmark sessions,
 // surface scans and SMART snapshots, keyed by device.

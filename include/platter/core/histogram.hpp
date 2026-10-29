@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Streaming latency histogram: log2 octaves split into 16 linear sub-buckets
 // (an HDR-style layout). Percentiles are upper-bound estimates within ~6 %,

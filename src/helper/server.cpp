@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // The privileged side. Everything a client sends is untrusted: this file is
 // the security boundary of the privilege separation, so it re-derives every

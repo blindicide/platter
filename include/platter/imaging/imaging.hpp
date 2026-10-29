@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Imaging and cloning (spec §11):
 //   CreateImage   device  -> image file (raw or zstd), SHA-256 of the data,

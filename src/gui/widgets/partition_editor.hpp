@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Partition manager dialog (spec §10). Edits are STAGED in memory and shown as
 // a diff; nothing is written until "Apply Changes" passes the typed-confirmation

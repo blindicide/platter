@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Secure erase by overwrite (spec §9): zero / one / random / multi-pass /
 // custom pattern / discard, with read-back verification and a report that

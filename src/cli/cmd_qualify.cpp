@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli qualify run|history|show ... : destructive burn-in behind the
 // safety pipeline. Run is destructive and always asks for a typed confirmation.

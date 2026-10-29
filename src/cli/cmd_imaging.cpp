@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // platter-cli image create|restore|verify ... and clone: imaging behind the
 // safety pipeline (restore and clone are destructive, create and verify only

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #include "../i18n/i18n.hpp"
 #include "partition_editor.hpp"
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // Partition table editing (spec §10): an in-memory plan that is validated,
 // diffed against what is on disk, encoded to exact sector images, and finally

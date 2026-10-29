@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: TBD
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //
 // The one and only GUI path to a destructive operation: shows exactly what
 // will be destroyed, refuses when the safety pipeline found blockers, and

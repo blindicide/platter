@@ -289,7 +289,10 @@ TEST_CASE("authorize succeeds, writes only inside the confirmed range", "[safety
 
     auto p = make_preview(image_request(img, {LbaRange{100, 10}}));
     REQUIRE(p);
-    auto t = authorize(*p, "v.img");
+    // This tests range enforcement, independently of direct-I/O buffer alignment.
+    AuthorizeOptions options;
+    options.direct_io = false;
+    auto t = authorize(*p, "v.img", options);
     REQUIRE(t);
     REQUIRE(audit.records.size() == 1);
     CHECK(audit.records[0].event == "authorized");

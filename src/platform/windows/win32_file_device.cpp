@@ -227,7 +227,8 @@ Result<BlockDevicePtr> open_file_device(const std::string& path, const OpenOptio
     // are mounted; exclusivity on disks comes from FSCTL_LOCK_VOLUME on each
     // volume (see lock_volumes_of_disk). Images can be opened exclusively.
     DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE;
-    if (opts.exclusive && is_image) share = 0;
+    // (still readable by others: tools and tests may inspect the file while it is held)
+    if (opts.exclusive && is_image) share = FILE_SHARE_READ;
     // Writing to a physical disk: take every volume on it first.
     std::vector<Handle> volume_locks;
     if (opts.exclusive && opts.mode == OpenMode::read_write && !is_image) {

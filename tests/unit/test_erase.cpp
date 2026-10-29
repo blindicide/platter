@@ -345,9 +345,10 @@ TEST_CASE("discard on an image punches holes that read back as zeros", "[erase]"
     REQUIRE(e->validate());
     REQUIRE(e->start());
     e->wait();
+    const auto why = e->progress().message + " " + e->result().failure;
     if (e->state() == OperationState::failed &&
-        e->progress().message.find("fallocate") != std::string::npos)
-        SKIP("this filesystem cannot punch holes");
+        (why.find("fallocate") != std::string::npos || why.find("not supported") != std::string::npos))
+        SKIP("this platform or filesystem cannot discard / punch holes");
     CHECK(e->state() == OperationState::completed);
     auto r = e->result();
     REQUIRE(r.passes.size() == 1);

@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <bit>
 #include <fstream>
 #include <set>
 #include <thread>
@@ -150,7 +151,7 @@ TEST_CASE("random pass leaves unpredictable data and verifies against the same s
     CHECK(distinct.size() > 250);
     // ~50% of bits set
     std::size_t ones = 0;
-    for (auto v : da) ones += static_cast<std::size_t>(__builtin_popcount(v));
+    for (auto v : da) ones += static_cast<std::size_t>(std::popcount(static_cast<unsigned>(v)));
     const double frac = static_cast<double>(ones) / (static_cast<double>(da.size()) * 8.0);
     CHECK(frac > 0.49);
     CHECK(frac < 0.51);

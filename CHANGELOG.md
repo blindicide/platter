@@ -4,6 +4,13 @@ platter follows semantic versioning from 1.0. Before 1.0 each milestone was a mi
 
 ## 1.1.0
 
+- Mounted volumes on Windows no longer hard-refuse a destructive operation: the confirmation dialog
+  shows them and needs an extra tick ("I understand ... will be locked and dismounted"); the CLI needs
+  `--dismount-volumes`. The Windows backend already locks and dismounts the disk's volumes and aborts
+  if one is in use. On Linux, and for the system disk and encryption/RAID holders, it stays a refusal.
+- The Windows package bundles smartctl (smartmontools, GPL-2.0+, unmodified, run as a separate process)
+  in `smartmontools\`; platter looks there before PATH and the default install directory.
+
 - **Russian locale.** The GUI is English by default; pick Russian in Settings > Preferences > Language
   (applies after a restart) or per run with `platter-gui --lang ru`. There is no system-locale
   auto-detection. All GUI text, the confirmation dialog, help topics and the common messages produced

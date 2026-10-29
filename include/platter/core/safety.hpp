@@ -67,6 +67,14 @@ struct Fingerprint {
     std::string describe() const;  // never includes the serial
 };
 
+#ifndef PLATTER_BACKEND_DISMOUNTS_VOLUMES
+#ifdef _WIN32
+#define PLATTER_BACKEND_DISMOUNTS_VOLUMES true
+#else
+#define PLATTER_BACKEND_DISMOUNTS_VOLUMES false
+#endif
+#endif
+
 struct Request {
     Kind kind = Kind::erase;
     Target target;
@@ -75,6 +83,12 @@ struct Request {
     std::vector<LbaRange> ranges;
     // One line shown in the preview: "Overwrite with zeros (1 pass), verify".
     std::string summary;
+    // True when this platform's backend locks and dismounts the volumes of a
+    // disk itself when it opens it for writing (Windows does; see
+    // lock_volumes_of_disk). Mounted volumes then need an explicit
+    // acknowledgment instead of being a hard refusal. Where nothing dismounts
+    // them (Linux), a mounted volume stays a blocker.
+    bool backend_dismounts_volumes = PLATTER_BACKEND_DISMOUNTS_VOLUMES;
 };
 
 struct Preview {
@@ -92,8 +106,13 @@ struct Preview {
 
     std::vector<std::string> blockers; // non-empty => authorize() will refuse
     std::vector<std::string> warnings;
+    // Mounted volumes that the backend will lock and dismount. Not blockers,
+    // but authorize() refuses unless AuthorizeOptions::acknowledge_dismount is
+    // set, which a front end may do only after showing them to the user.
+    std::vector<std::string> mounted;
 
     bool allowed() const noexcept { return blockers.empty(); }
+    bool needs_dismount_ack() const noexcept { return !mounted.empty(); }
     bool confirmation_ok(std::string_view typed) const;
 };
 
@@ -112,6 +131,9 @@ std::string preview_text(const Preview& p, bool show_serial);
 struct AuthorizeOptions {
     // Try O_DIRECT / NO_BUFFERING; falls back to buffered with a warning.
     bool direct_io = true;
+    // The user has seen Preview::mounted and agreed that those volumes are
+    // locked and dismounted (open files in them are lost).
+    bool acknowledge_dismount = false;
     DeviceLeaseRegistry* registry = nullptr;  // null = DeviceLeaseRegistry::global()
 };
 

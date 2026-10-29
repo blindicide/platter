@@ -160,6 +160,8 @@ Erase options (erase run):
   --block-size SIZE     Bytes per request (default 1M)
   --confirm TEXT        The typed confirmation (model name, last 4 of serial, or image file name)
   --dry-run             Show the preview and stop; nothing is written
+  --dismount-volumes    Windows: agree that mounted volumes on the target disk are locked and
+                        dismounted (open files in them are lost). Without it such a disk is refused
   --report FILE         Also write the text report
 
 History (SQLite; off unless asked):
@@ -194,7 +196,7 @@ const std::set<std::string> kValueOptions = {
     // privilege separation
     "--helper"};
 const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run",
-                                             "--bootable", "--no-bootable", "--logical", "--extended",
+                                             "--dismount-volumes", "--bootable", "--no-bootable", "--logical", "--extended",
                                              "--sparse", "--force", "--recover", "--no-verify", "--no-sidecar", "--use-sidecar",
                                              "--ignore-case", "--no-interpret", "--no-final-read", "--no-smart"};
 

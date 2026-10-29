@@ -76,6 +76,10 @@ Further rules for the engines on top (erase, write benchmarks, write scans):
   constructors refuse write modes with `Errc::refused`.
 - Write scans and write benchmarks validate that their whole region lies inside
   the confirmed ranges before they start.
+- Mounted volumes: on Linux a mounted volume (or an encryption/RAID holder) is a hard refusal. On
+  Windows the backend locks and dismounts every volume of the disk itself (and aborts if one is in
+  use), so mounted volumes need an extra acknowledgment instead: a checkbox in the GUI confirmation
+  dialog, `--dismount-volumes` in the CLI. The system disk and holders stay hard refusals.
 - The CLI never offers a "yes to all" flag; `--dry-run` shows the preview and
   exits without writing.
 - Reports state what was written and what was verified, and the limits of

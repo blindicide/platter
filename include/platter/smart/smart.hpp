@@ -117,7 +117,7 @@ struct RunOptions {
     std::string device_type;     // passed as -d <type> when non-empty
 };
 
-// Locates smartctl: $PLATTER_SMARTCTL, then PATH, then the default Windows
+// Locates smartctl: $PLATTER_SMARTCTL, then next to the executable (smartmontools/ or alongside), then PATH, then the default Windows
 // install directory.
 std::optional<std::string> find_smartctl();
 

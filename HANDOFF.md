@@ -47,6 +47,16 @@ disposable HDD / USB stick, with the important drive unplugged).
 - English is the default; Russian is chosen in Preferences (`prefs/language` in QSettings, applies after
   restart) or `platter-gui --lang ru`. No system-locale detection, by the owner's request.
 - See "Localization" below for the design and the update workflow. Nothing in the core libraries changed.
+- Mounted-volume override (after the owner's request, tested only with image files / fake devices):
+  `Preview::mounted` + `AuthorizeOptions::acknowledge_dismount` + `Request::backend_dismounts_volumes`
+  (true only on Windows); GUI checkbox in `ConfirmDialog`, CLI `--dismount-volumes`. authorize() also
+  refuses if a volume appeared after the preview. Still TODO: refuse only for volumes that overlap the
+  chosen range, and a partition picker in the Surface/Benchmark/Erase/Qualify/Imaging tabs.
+- smartctl is bundled into the Windows package by CI (`Bundle smartctl` step, choco). `find_smartctl()`
+  order: $PLATTER_SMARTCTL, `<exe dir>/smartmontools/smartctl(.exe)`, `<exe dir>/smartctl(.exe)`, PATH,
+  default install dirs. The CI step is unverified until the next Windows run; check the choco package
+  layout if it fails. Licensing: GPL text and source link ship in that folder; the owner still has to
+  pick platter's own license.
 - Not done / known limits: CLI, JSON and text reports stay English by design; untranslated are the report
   text panels (`*_to_text`), plan diff text, stored history headlines/states, raw OS and smartctl messages,
   CHS notation, and a few inspector values (e.g. "0 of 440 bytes non-zero"). The Russian text is

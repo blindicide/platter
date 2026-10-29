@@ -234,6 +234,52 @@ TEST_CASE("authorize refuses a blocked preview before touching anything", "[safe
     CHECK(r.error().message.find("/mnt/x") != std::string::npos);
 }
 
+TEST_CASE("mounted volumes: hard blocker without a dismounting backend, acknowledgment with one", "[safety]") {
+    Request req;
+    req.kind = Kind::erase;
+    req.target.path = "/dev/sdz";
+    auto d = fake_disk();
+    d.mountpoints = {"E:\\", "H:\\"};
+
+    req.backend_dismounts_volumes = false;
+    auto hard = preview_for(d, req);
+    CHECK_FALSE(hard.allowed());
+    CHECK(hard.mounted.empty());
+
+    req.backend_dismounts_volumes = true;
+    auto soft = preview_for(d, req);
+    CHECK(soft.allowed());
+    CHECK(soft.needs_dismount_ack());
+    REQUIRE(soft.mounted.size() == 2);
+    CHECK(preview_text(soft, false).find("DISMOUNT:") != std::string::npos);
+
+    // the system disk and holders stay hard refusals either way
+    auto sys = d;
+    sys.is_system_disk = true;
+    CHECK_FALSE(preview_for(sys, req).allowed());
+    auto held = d;
+    held.holders = {"dm-crypt:x"};
+    CHECK_FALSE(preview_for(held, req).allowed());
+}
+
+TEST_CASE("authorize needs the dismount acknowledgment when volumes were shown as mounted", "[safety]") {
+    TempDir tmp;
+    const auto img = tmp / "m.img";
+    test::make_sparse_file(img, 1 << 20);
+    auto p = make_preview(image_request(img));
+    REQUIRE(p);
+    p->mounted.push_back("E:\\");
+
+    auto no = authorize(*p, "m.img");
+    REQUIRE_FALSE(no);
+    CHECK(no.error().code == Errc::refused);
+    CHECK(no.error().message.find("not acknowledged") != std::string::npos);
+
+    AuthorizeOptions ack;
+    ack.acknowledge_dismount = true;
+    CHECK(authorize(*p, "m.img", ack));
+}
+
 TEST_CASE("authorize succeeds, writes only inside the confirmed range", "[safety]") {
     TempDir tmp;
     const auto img = tmp / "v.img";

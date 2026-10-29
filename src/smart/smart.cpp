@@ -10,6 +10,14 @@
 
 #include "platter/core/process.hpp"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 using nlohmann::json;
 
 namespace platter::smart {
@@ -340,8 +348,43 @@ Assessment assess(const Report& r) {
 
 // ------------------------------------------------------------------ running
 
+namespace {
+// Directory of the running executable ("" if unknown), used to find a smartctl
+// shipped with platter (the Windows package bundles one in smartmontools\).
+std::string executable_dir() {
+    std::string path;
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        const int len = WideCharToMultiByte(CP_UTF8, 0, buf, static_cast<int>(n), nullptr, 0, nullptr, nullptr);
+        if (len > 0) {
+            path.resize(static_cast<std::size_t>(len));
+            WideCharToMultiByte(CP_UTF8, 0, buf, static_cast<int>(n), path.data(), len, nullptr, nullptr);
+        }
+    }
+    const char sep = '\\';
+#else
+    char buf[4096];
+    const ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+    if (n > 0) path.assign(buf, static_cast<std::size_t>(n));
+    const char sep = '/';
+#endif
+    const auto cut = path.find_last_of(sep);
+    return cut == std::string::npos ? std::string() : path.substr(0, cut);
+}
+}  // namespace
+
 std::optional<std::string> find_smartctl() {
     if (const char* env = std::getenv("PLATTER_SMARTCTL"); env && *env) return std::string(env);
+    if (const auto dir = executable_dir(); !dir.empty()) {
+#ifdef _WIN32
+        for (const char* rel : {"\\smartmontools\\smartctl.exe", "\\smartctl.exe"})
+#else
+        for (const char* rel : {"/smartmontools/smartctl", "/smartctl"})
+#endif
+            if (auto p = find_in_path(dir + rel); !p.empty()) return p;
+    }
     if (auto p = find_in_path("smartctl"); !p.empty()) return p;
 #ifdef _WIN32
     for (const char* candidate : {"C:\\Program Files\\smartmontools\\bin\\smartctl.exe",

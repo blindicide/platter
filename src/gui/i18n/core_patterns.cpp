@@ -14,6 +14,8 @@ const std::vector<Pattern>& core_patterns() {
         };
         add("range (\\d+)\\+(\\d+) lies outside the device \\((\\d+) sectors\\)", QT_TRANSLATE_NOOP("core", "range %1+%2 lies outside the device (%3 sectors)"), ArgMode::verbatim);
         add("a volume is mounted at (.+)", QT_TRANSLATE_NOOP("core", "a volume is mounted at %1"), ArgMode::verbatim);
+        add("volumes are mounted on this device \\((.+)\\) and the dismount was not acknowledged", QT_TRANSLATE_NOOP("core", "volumes are mounted on this device (%1) and the dismount was not acknowledged"), ArgMode::verbatim);
+        add("a volume was mounted at (.+) after the preview was shown", QT_TRANSLATE_NOOP("core", "a volume was mounted at %1 after the preview was shown"), ArgMode::verbatim);
         add("in use by (.+) \\(volume manager / encryption / RAID\\)", QT_TRANSLATE_NOOP("core", "in use by %1 (volume manager / encryption / RAID)"), ArgMode::verbatim);
         add("Data in the selected range of (.+) will be destroyed and cannot be recovered\\.", QT_TRANSLATE_NOOP("core", "Data in the selected range of %1 will be destroyed and cannot be recovered."), ArgMode::verbatim);
         add("To confirm, type the image file name: (.+)", QT_TRANSLATE_NOOP("core", "To confirm, type the image file name: %1"), ArgMode::verbatim);

@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="ru_RU">
 <context>
     <name>ConfirmDialog</name>
@@ -73,6 +74,18 @@
     <message>
         <source>&amp;Destroy Data and Start</source>
         <translation>&amp;Уничтожить данные и начать</translation>
+    </message>
+    <message>
+        <source>DISMOUNT:</source>
+        <translation>ОТМОНТИРОВАНИЕ:</translation>
+    </message>
+    <message>
+        <source>the volume mounted at %1 will be locked and dismounted</source>
+        <translation>том, смонтированный в %1, будет заблокирован и отмонтирован</translation>
+    </message>
+    <message>
+        <source>I understand that the mounted volumes (%1) will be locked and dismounted, and programs using them will lose unsaved data.</source>
+        <translation>Я понимаю, что смонтированные тома (%1) будут заблокированы и отмонтированы, а программы, которые их используют, потеряют несохранённые данные.</translation>
     </message>
 </context>
 <context>
@@ -926,7 +939,7 @@
         <translation>Сброс буферов</translation>
     </message>
     <message>
-        <source>For sensitive data use the drive's secure-erase / sanitize command or encryption.</source>
+        <source>For sensitive data use the drive&apos;s secure-erase / sanitize command or encryption.</source>
         <translation>Для конфиденциальных данных используйте команду безопасного стирания (secure erase / sanitize) накопителя или шифрование.</translation>
     </message>
     <message>
@@ -1366,7 +1379,7 @@
         <translation>Выборочное случайное чтение</translation>
     </message>
     <message>
-        <source>Random reads confined to a region under 2 GiB may be served from the drive's cache.</source>
+        <source>Random reads confined to a region under 2 GiB may be served from the drive&apos;s cache.</source>
         <translation>Случайное чтение в области менее 2 ГиБ может обслуживаться из кэша накопителя.</translation>
     </message>
     <message>
@@ -1498,7 +1511,7 @@
         <translation>Сигнатура</translation>
     </message>
     <message>
-        <source>Small test size: a large part of it may be served from the drive's own cache.</source>
+        <source>Small test size: a large part of it may be served from the drive&apos;s own cache.</source>
         <translation>Малый объём теста: значительная его часть может обслуживаться из собственного кэша накопителя.</translation>
     </message>
     <message>
@@ -1530,7 +1543,7 @@
         <translation>Устройство не сообщает ни серийный номер, ни устойчивый идентификатор: такой же накопитель нельзя будет отличить от этого.</translation>
     </message>
     <message>
-        <source>The drive's volatile write cache can inflate short write tests; each phase ends with a flush.</source>
+        <source>The drive&apos;s volatile write cache can inflate short write tests; each phase ends with a flush.</source>
         <translation>Энергозависимый кэш записи накопителя может завышать результат коротких тестов записи; каждая фаза заканчивается сбросом кэша.</translation>
     </message>
     <message>
@@ -2490,7 +2503,7 @@
         <translation>код ОС</translation>
     </message>
     <message>
-        <source>Flash storage remaps and over-provisions blocks, so overwriting cannot reach every cell. For sensitive data use the drive's secure-erase / sanitize command or encryption.</source>
+        <source>Flash storage remaps and over-provisions blocks, so overwriting cannot reach every cell. For sensitive data use the drive&apos;s secure-erase / sanitize command or encryption.</source>
         <translation>Флеш-память переназначает блоки и держит резервную область, поэтому перезапись не может достичь каждой ячейки. Для конфиденциальных данных используйте команду безопасного стирания (secure erase / sanitize) накопителя или шифрование.</translation>
     </message>
     <message>
@@ -2786,11 +2799,11 @@
         <translation>%1 занято исключительно деструктивной операцией</translation>
     </message>
     <message>
-        <source>no block device named '%1'</source>
+        <source>no block device named &apos;%1&apos;</source>
         <translation>нет блочного устройства с именем «%1»</translation>
     </message>
     <message>
-        <source>invalid block device name '%1'</source>
+        <source>invalid block device name &apos;%1&apos;</source>
         <translation>недопустимое имя блочного устройства «%1»</translation>
     </message>
     <message>
@@ -2804,6 +2817,14 @@
     <message>
         <source>primary</source>
         <translation>основной</translation>
+    </message>
+    <message>
+        <source>volumes are mounted on this device (%1) and the dismount was not acknowledged</source>
+        <translation>на этом устройстве смонтированы тома (%1), а отмонтирование не подтверждено</translation>
+    </message>
+    <message>
+        <source>a volume was mounted at %1 after the preview was shown</source>
+        <translation>том смонтирован в %1 уже после показа предпросмотра</translation>
     </message>
 </context>
 <context>
@@ -3184,7 +3205,12 @@ Benchmarking a physical disk needs root / Administrator.</source>
     </message>
     <message numerus="yes">
         <source>%n saved session(s) for this device</source>
-        <translation><numerusform>Сохранённый сеанс для этого устройства: %n</numerusform><numerusform>Сохранённых сеанса для этого устройства: %n</numerusform><numerusform>Сохранённых сеансов для этого устройства: %n</numerusform></translation></message>
+        <translation>
+            <numerusform>Сохранённый сеанс для этого устройства: %n</numerusform>
+            <numerusform>Сохранённых сеанса для этого устройства: %n</numerusform>
+            <numerusform>Сохранённых сеансов для этого устройства: %n</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Viewing saved session #%1 from %2</source>
         <translation>Просмотр сохранённого сеанса №%1 от %2</translation>
@@ -3418,7 +3444,12 @@ Benchmarking a physical disk needs root / Administrator.</source>
     </message>
     <message numerus="yes">
         <source>%n pass(es) of random data</source>
-        <translation><numerusform>%n проход случайных данных</numerusform><numerusform>%n прохода случайных данных</numerusform><numerusform>%n проходов случайных данных</numerusform></translation></message>
+        <translation>
+            <numerusform>%n проход случайных данных</numerusform>
+            <numerusform>%n прохода случайных данных</numerusform>
+            <numerusform>%n проходов случайных данных</numerusform>
+        </translation>
+    </message>
     <message>
         <source>%1; verification: %2</source>
         <translation>%1; проверка: %2</translation>
@@ -3644,7 +3675,7 @@ Press Go to read the sector above (empty = LBA 0). Reads are strictly read-only;
         <translation>Не удаётся разобрать как %1: %2</translation>
     </message>
     <message>
-        <source>These bytes are not a structure platter recognises. Pick "Interpret as" to force one.</source>
+        <source>These bytes are not a structure platter recognises. Pick &quot;Interpret as&quot; to force one.</source>
         <translation>Эти байты не являются структурой, которую распознаёт platter. Выберите «Разобрать как», чтобы задать структуру вручную.</translation>
     </message>
     <message>
@@ -3771,7 +3802,7 @@ Press Go to read the sector above (empty = LBA 0). Reads are strictly read-only;
         <translation>Не удаётся прочитать историю: %1</translation>
     </message>
     <message>
-        <source>Nothing saved yet for this filter. Results are saved when "Record results in history" is on.</source>
+        <source>Nothing saved yet for this filter. Results are saved when &quot;Record results in history&quot; is on.</source>
         <translation>Для этого фильтра пока ничего не сохранено. Результаты сохраняются, когда включён пункт «Вести историю».</translation>
     </message>
     <message>
@@ -4676,7 +4707,12 @@ This only deletes the saved record. Nothing on any device is touched.</source>
     </message>
     <message numerus="yes">
         <source>Found %n storage device(s)</source>
-        <translation><numerusform>Найдено устройство хранения: %n</numerusform><numerusform>Найдено устройства хранения: %n</numerusform><numerusform>Найдено устройств хранения: %n</numerusform></translation></message>
+        <translation>
+            <numerusform>Найдено устройство хранения: %n</numerusform>
+            <numerusform>Найдено устройства хранения: %n</numerusform>
+            <numerusform>Найдено устройств хранения: %n</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Previously selected device %1 is no longer present</source>
         <translation>Ранее выбранное устройство %1 больше не обнаружено</translation>
@@ -5597,7 +5633,12 @@ Planned for %2. This tab is a placeholder so the layout matches the specificatio
     </message>
     <message numerus="yes">
         <source>%n write pass(es)</source>
-        <translation><numerusform>%n проход записи</numerusform><numerusform>%n прохода записи</numerusform><numerusform>%n проходов записи</numerusform></translation></message>
+        <translation>
+            <numerusform>%n проход записи</numerusform>
+            <numerusform>%n прохода записи</numerusform>
+            <numerusform>%n проходов записи</numerusform>
+        </translation>
+    </message>
     <message>
         <source> with read-back</source>
         <translation> с контрольным чтением</translation>
@@ -5608,7 +5649,12 @@ Planned for %2. This tab is a placeholder so the layout matches the specificatio
     </message>
     <message numerus="yes">
         <source>, %n random read(s)</source>
-        <translation><numerusform>, %n случайное чтение</numerusform><numerusform>, %n случайных чтения</numerusform><numerusform>, %n случайных чтений</numerusform></translation></message>
+        <translation>
+            <numerusform>, %n случайное чтение</numerusform>
+            <numerusform>, %n случайных чтения</numerusform>
+            <numerusform>, %n случайных чтений</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Confirm Qualification</source>
         <translation>Подтверждение квалификации</translation>
@@ -5691,7 +5737,7 @@ Planned for %2. This tab is a placeholder so the layout matches the specificatio
         <translation>&amp;Запросить SMART</translation>
     </message>
     <message>
-        <source>Runs 'smartctl --json -a' (read-only)</source>
+        <source>Runs &apos;smartctl --json -a&apos; (read-only)</source>
         <translation>Запускает «smartctl --json -a» (только чтение)</translation>
     </message>
     <message>

@@ -2,6 +2,7 @@
 #include "../i18n/i18n.hpp"
 #include "confirm_dialog.hpp"
 
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -32,7 +33,8 @@ QString localized_preview_text(const safety::Preview& p, bool show_serial, const
                              QCoreApplication::translate("ConfirmDialog", "Range:"),
                              QCoreApplication::translate("ConfirmDialog", "Affected:"),
                              QCoreApplication::translate("ConfirmDialog", "Warning:"),
-                             QCoreApplication::translate("ConfirmDialog", "REFUSED:")};
+                             QCoreApplication::translate("ConfirmDialog", "REFUSED:"),
+                             QCoreApplication::translate("ConfirmDialog", "DISMOUNT:")};
     int width = 0;
     for (const auto& l : labels) width = std::max(width, static_cast<int>(l.size()));
     const auto line = [&](int i, const QString& value) {
@@ -58,6 +60,8 @@ QString localized_preview_text(const safety::Preview& p, bool show_serial, const
         o += line(6, i18n::units(qs(format_capacity(p.affected_bytes))));
     }
     for (const auto& w : p.warnings) o += line(7, i18n::ct(w));
+    for (const auto& m : p.mounted)
+        o += line(9, QCoreApplication::translate("ConfirmDialog", "the volume mounted at %1 will be locked and dismounted").arg(qs(m)));
     for (const auto& b : p.blockers) o += line(8, i18n::ct(b));
     return o;
 }
@@ -92,6 +96,16 @@ public:
             edit_ = new QLineEdit(this);
             edit_->setPlaceholderText(QCoreApplication::translate("ConfirmDialog", "type the confirmation here"));
             v->addWidget(edit_);
+            if (preview.needs_dismount_ack()) {
+                QStringList vols;
+                for (const auto& m : preview.mounted) vols << QString::fromStdString(m);
+                ack_ = new QCheckBox(QCoreApplication::translate("ConfirmDialog",
+                                         "I understand that the mounted volumes (%1) will be locked and dismounted, "
+                                         "and programs using them will lose unsaved data.")
+                                         .arg(vols.join(QStringLiteral(", "))),
+                                     this);
+                v->addWidget(ack_);
+            }
         }
 
         buttons_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
@@ -104,18 +118,22 @@ public:
         connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
         connect(buttons_, &QDialogButtonBox::accepted, this, &QDialog::accept);
         if (edit_) {
-            connect(edit_, &QLineEdit::textChanged, this, [this](const QString& t) {
-                ok_->setEnabled(preview_.confirmation_ok(t.toStdString()));
-            });
+            const auto refresh = [this] {
+                ok_->setEnabled(preview_.confirmation_ok(edit_->text().toStdString()) && (!ack_ || ack_->isChecked()));
+            };
+            connect(edit_, &QLineEdit::textChanged, this, refresh);
+            if (ack_) connect(ack_, &QCheckBox::toggled, this, refresh);
             edit_->setFocus();
         }
     }
 
     QString typed() const { return edit_ ? edit_->text() : QString(); }
+    bool acknowledged() const { return ack_ && ack_->isChecked(); }
 
 private:
     safety::Preview preview_;
     QLineEdit* edit_ = nullptr;
+    QCheckBox* ack_ = nullptr;
     QDialogButtonBox* buttons_ = nullptr;
     QPushButton* ok_ = nullptr;
 };
@@ -135,7 +153,9 @@ AuthorizeOutcome confirm_and_authorize(QWidget* parent, const QString& title, co
         out.cancelled = true;
         return out;
     }
-    auto target = safety::authorize(*preview, dlg.typed().toStdString());
+    safety::AuthorizeOptions ao;
+    ao.acknowledge_dismount = dlg.acknowledged();
+    auto target = safety::authorize(*preview, dlg.typed().toStdString(), ao);
     if (!target) {
         out.error = i18n::err(target.error());
         return out;

@@ -149,6 +149,19 @@ jobs:
           cp build/src/Release/platter-cli.exe build/src/Release/platter-gui.exe dist/platter/
           windeployqt --release --translations ru --no-opengl-sw dist/platter/platter-gui.exe
 
+      # smartmontools (GPL-2.0-or-later) is shipped unmodified as a separate program that platter
+      # runs for SMART data; see packaging/windows/SMARTMONTOOLS.txt.
+      - name: Bundle smartctl
+        run: |
+          choco install smartmontools -y --no-progress
+          SM="/c/Program Files/smartmontools"
+          mkdir -p dist/platter/smartmontools
+          cp "$SM/bin/smartctl.exe" dist/platter/smartmontools/
+          cp "$SM"/doc/COPYING* dist/platter/smartmontools/ 2>/dev/null || true
+          cp packaging/windows/SMARTMONTOOLS.txt dist/platter/smartmontools/README.txt
+          dist/platter/smartmontools/smartctl.exe --version | head -3
+          ls dist/platter/smartmontools
+
       - uses: actions/upload-artifact@v4
         with:
           name: platter-windows-x64

@@ -409,6 +409,12 @@ inline std::optional<safety::AuthorizedTarget> authorize_from_cli(const Options&
         code = kOk;
         return std::nullopt;
     }
+    if (preview->needs_dismount_ack() && !o.flags.count("dismount-volumes")) {
+        std::cerr << "platter-cli: refused: volumes are mounted on this disk and will be locked and dismounted "
+                     "(open files in them are lost).\nRe-run with --dismount-volumes to agree, or unmount them first.\n";
+        code = kRefused;
+        return std::nullopt;
+    }
     auto typed = obtain_confirmation(o, *preview);
     if (!typed) {
         std::cerr << "platter-cli: this will DESTROY data. " << preview->prompt
@@ -416,7 +422,9 @@ inline std::optional<safety::AuthorizedTarget> authorize_from_cli(const Options&
         code = kRefused;
         return std::nullopt;
     }
-    auto target = safety::authorize(*preview, *typed);
+    safety::AuthorizeOptions ao;
+    ao.acknowledge_dismount = o.flags.count("dismount-volumes") > 0;
+    auto target = safety::authorize(*preview, *typed, ao);
     if (!target) {
         code = fail(target.error(), "authorization");
         return std::nullopt;

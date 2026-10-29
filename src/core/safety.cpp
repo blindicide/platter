@@ -150,6 +150,7 @@ std::string preview_text(const Preview& p, bool show_serial) {
         o += "Affected:    " + format_capacity(p.affected_bytes) + "\n";
     }
     for (const auto& w : p.warnings) o += "Warning:     " + w + "\n";
+    for (const auto& m : p.mounted) o += "DISMOUNT:    the volume mounted at " + m + " will be locked and dismounted\n";
     for (const auto& b : p.blockers) o += "REFUSED:     " + b + "\n";
     return o;
 }
@@ -205,7 +206,12 @@ Preview preview_for(const DeviceInfo& device, const Request& req) {
         if (!d.capabilities.has(Capability::write))
             p.blockers.push_back("writing is not available for this device (permissions or read-only media)");
         if (d.is_system_disk) p.blockers.push_back("this is the system disk");
-        for (const auto& m : d.mountpoints) p.blockers.push_back("a volume is mounted at " + m);
+        for (const auto& m : d.mountpoints) {
+            if (req.backend_dismounts_volumes)
+                p.mounted.push_back(m);
+            else
+                p.blockers.push_back("a volume is mounted at " + m);
+        }
         for (const auto& h : d.holders) p.blockers.push_back("in use by " + h + " (volume manager / encryption / RAID)");
     }
 
@@ -296,6 +302,9 @@ Result<AuthorizedTarget> authorize(const Preview& shown, std::string_view typed_
 
     if (!shown.allowed()) return refuse("the operation is blocked: " + shown.blockers.front());
     if (!shown.confirmation_ok(typed_confirmation)) return refuse("the confirmation text does not match");
+    if (shown.needs_dismount_ack() && !opts.acknowledge_dismount)
+        return refuse("volumes are mounted on this device (" + shown.mounted.front() +
+                      ") and the dismount was not acknowledged");
 
     // Everything is re-observed from scratch: the preview may be stale.
     auto fresh = make_preview(shown.request);
@@ -305,6 +314,9 @@ Result<AuthorizedTarget> authorize(const Preview& shown, std::string_view typed_
         return refuse("the device is not the one that was previewed (identity changed: now " +
                       fresh->fingerprint.describe() + ")");
     if (fresh->ranges != shown.ranges) return refuse("the confirmed range no longer matches the device");
+    for (const auto& m : fresh->mounted)
+        if (std::find(shown.mounted.begin(), shown.mounted.end(), m) == shown.mounted.end())
+            return refuse("a volume was mounted at " + m + " after the preview was shown");
 
     DeviceLeaseRegistry& registry = opts.registry ? *opts.registry : DeviceLeaseRegistry::global();
     auto lease = registry.acquire(fresh->device.path, AccessKind::exclusive);
@@ -361,6 +373,7 @@ Result<AuthorizedTarget> authorize(const Preview& shown, std::string_view typed_
     r.capacity_bytes = fresh->device.capacity_bytes;
     r.affected_bytes = fresh->affected_bytes;
     r.detail = shown.request.summary;
+    for (const auto& m : shown.mounted) r.detail += "; dismounting volume at " + m;
     emit(std::move(r));
 
     return AuthorizedTarget(std::move(dev).value(), std::move(lease).value(), shown, direct, std::move(warnings));

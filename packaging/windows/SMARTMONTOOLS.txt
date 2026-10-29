@@ -1,0 +1,9 @@
+smartctl.exe in this folder is part of smartmontools, an unmodified third-party program.
+
+  Project and source code:  https://www.smartmontools.org/
+  License:                  GNU General Public License, version 2 or (at your option) any later version
+                            (see COPYING*, next to smartctl.exe, if present, or the project site)
+
+platter does not link against it: it starts smartctl.exe as a separate process and reads its
+output to show SMART data. To use a different build, set the environment variable
+PLATTER_SMARTCTL to its full path, or delete this folder and install smartmontools yourself.

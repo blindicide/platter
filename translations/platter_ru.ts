@@ -3500,6 +3500,10 @@ Benchmarking a physical disk needs root / Administrator.</source>
         <translation>Не удаётся записать %1:
 %2</translation>
     </message>
+    <message>
+        <source>LBA values must be unsigned 64-bit numbers.</source>
+        <translation>Значения LBA должны быть беззнаковыми 64-битными числами.</translation>
+    </message>
 </context>
 <context>
     <name>platter::gui::HelpDialog</name>
@@ -4888,14 +4892,14 @@ They are omitted by default because reports are often shared.</source>
         <translation>Сведения о лицензии</translation>
     </message>
     <message>
-        <source>platter: license to be decided by the author.
+        <source>platter: Copyright (c) 2026 Ruslan Yakunin. All rights reserved.
 
 Third-party components:
   Qt 6 (LGPL v3)
   nlohmann/json (MIT)
   smartmontools (GPL v2, invoked as an external program)
 </source>
-        <translation>platter: лицензия будет определена автором.
+        <translation>platter: Copyright (c) 2026 Ruslan Yakunin. Все права защищены.
 
 Сторонние компоненты:
   Qt 6 (LGPL v3)
@@ -5910,6 +5914,14 @@ Planned for %2. This tab is a placeholder so the layout matches the specificatio
     <message>
         <source>Error Information Log Entries</source>
         <translation>Записей журнала ошибок</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Авто</translation>
+    </message>
+    <message>
+        <source>SMART device type override for USB-to-SATA adapters.</source>
+        <translation>Тип устройства SMART для адаптеров USB–SATA.</translation>
     </message>
 </context>
 <context>

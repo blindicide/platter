@@ -332,6 +332,13 @@ void SurfaceTab::resetDefaults() {
 
 void SurfaceTab::setDevice(const DeviceEntry* e) {
     if (isRunning()) return;  // a running scan stays bound to its own device
+    const QString identity = e ? QString::fromStdString(storage::HistoryStore::device_key(e->info)) : QString();
+    if (range_identity_ != identity || target_path_ != (e ? QString::fromStdString(e->info.path) : QString()) ||
+        (e && target_sector_ != (e->is_image ? e->image_sector_size : e->info.logical_sector_size))) {
+        start_lba_->setText(QStringLiteral(""));
+        end_lba_->clear();
+    }
+    range_identity_ = identity;
     if (!e) {
         target_path_.clear();
         target_label_.clear();
@@ -579,6 +586,7 @@ void SurfaceTab::finishScan() {
     }
     scan_.reset();
     updateButtons();
+    emit operationFinished();
 }
 
 void SurfaceTab::showStats(const ScanStats& s, const OperationProgress& p) {

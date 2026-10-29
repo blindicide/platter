@@ -403,6 +403,14 @@ void MainWindow::buildCentral() {
     addKeyedTab(tabs_, smart_tab_, QStringLiteral("SMART"), tr("SMART"));
     surface_tab_ = new SurfaceTab(tabs_);
     addKeyedTab(tabs_, surface_tab_, QStringLiteral("SURFACE"), tr("SURFACE"));
+    const auto sync_targets = [this] {
+        surface_tab_->setDevice(current());
+        bench_tab_->setDevice(current());
+        erase_tab_->setDevice(current());
+    };
+    connect(surface_tab_, &SurfaceTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
+    connect(bench_tab_, &BenchmarkTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
+    connect(erase_tab_, &EraseTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
     connect(surface_tab_, &SurfaceTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     bench_tab_ = new BenchmarkTab(tabs_);
@@ -706,8 +714,10 @@ void MainWindow::querySmart() {
     const std::string path = e->info.path;
     log_->add(Severity::info, tr("Querying SMART via smartctl"), qs(path));
     QPointer<MainWindow> self(this);
-    run_worker(this, [self, path] {
-        auto rep = smart::query(path);
+    smart::RunOptions options;
+    options.device_type = smart_tab_->deviceType().toStdString();
+    run_worker(this, [self, path, options] {
+        auto rep = smart::query(path, options);
         QMetaObject::invokeMethod(
             qApp,
             [self, path, rep = std::move(rep)]() mutable {
@@ -989,7 +999,7 @@ void MainWindow::about() {
 
 void MainWindow::licenseInfo() {
     QMessageBox::information(this, tr("License Information"),
-                             tr("platter: license to be decided by the author.\n\n"
+                             tr("platter: Copyright (c) 2026 Ruslan Yakunin. All rights reserved.\n\n"
                                 "Third-party components:\n"
                                 "  Qt 6 (LGPL v3)\n"
                                 "  nlohmann/json (MIT)\n"

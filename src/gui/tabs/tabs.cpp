@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Proprietary
 #include "../i18n/i18n.hpp"
 #include "tabs.hpp"
+#include <QComboBox>
 
 #include <QBoxLayout>
 #include <QGroupBox>
@@ -183,6 +184,12 @@ SmartTab::SmartTab(QWidget* parent) : QWidget(parent) {
     health_ = new QLabel(this);
     health_->setObjectName(QStringLiteral("healthUnknown"));
     row->addWidget(query_);
+    device_type_ = new QComboBox(this);
+    device_type_->addItem(tr("Auto"), QString());
+    for (const auto* type : {"sat", "sat,12", "sat,16", "scsi", "usbjmicron"})
+        device_type_->addItem(QString::fromLatin1(type), QString::fromLatin1(type));
+    device_type_->setToolTip(tr("SMART device type override for USB-to-SATA adapters."));
+    row->addWidget(device_type_);
     row->addWidget(new QLabel(tr("Health:"), this));
     row->addWidget(health_);
     row->addWidget(status_, 1);
@@ -209,7 +216,10 @@ SmartTab::SmartTab(QWidget* parent) : QWidget(parent) {
     setDevice(nullptr);
 }
 
+QString SmartTab::deviceType() const { return device_type_->currentData().toString(); }
+
 void SmartTab::setBusy(bool busy) {
+    device_type_->setEnabled(!busy);
     query_->setEnabled(!busy);
     if (busy) status_->setText(tr("Querying smartctl..."));
 }

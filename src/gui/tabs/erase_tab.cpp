@@ -135,6 +135,13 @@ void EraseTab::setHistory(storage::HistoryStore* store, bool record) {
 
 void EraseTab::setDevice(const DeviceEntry* e) {
     if (isRunning()) return;
+    const QString identity = e ? QString::fromStdString(storage::HistoryStore::device_key(e->info)) : QString();
+    if (range_identity_ != identity || target_path_ != (e ? QString::fromStdString(e->info.path) : QString()) ||
+        (e && target_sector_ != (e->is_image ? e->image_sector_size : e->info.logical_sector_size))) {
+        start_lba_->setText(QStringLiteral(""));
+        end_lba_->clear();
+    }
+    range_identity_ = identity;
     have_target_ = e != nullptr;
     if (!e) {
         target_path_.clear();
@@ -212,13 +219,23 @@ void EraseTab::onStart() {
             QMessageBox::warning(this, tr("Erase"), tr("Enter an End LBA, or clear Start LBA to erase the whole device."));
             return;
         }
-        const auto first = start_lba_->text().isEmpty() ? 0ull : start_lba_->text().toULongLong();
-        const auto last = end_lba_->text().toULongLong();
+        bool first_ok = true, last_ok = true;
+        const auto first = start_lba_->text().isEmpty() ? 0ull : start_lba_->text().toULongLong(&first_ok);
+        const auto last = end_lba_->text().toULongLong(&last_ok);
+        if (!first_ok || !last_ok) {
+            QMessageBox::warning(this, tr("Erase"), tr("LBA values must be unsigned 64-bit numbers."));
+            return;
+        }
         if (last < first) {
             QMessageBox::warning(this, tr("Erase"), tr("End LBA must not be smaller than Start LBA."));
             return;
         }
-        req.ranges.push_back(LbaRange{first, last - first + 1});
+        auto range = lba_range_inclusive(first, last);
+        if (!range) {
+            QMessageBox::warning(this, tr("Erase"), i18n::err(range.error()));
+            return;
+        }
+        req.ranges.push_back(*range);
     }
     std::string summary = std::string(erase::method_label(cfg->method));
     if (cfg->method == erase::Method::random_n) summary = std::to_string(cfg->random_passes) + " passes of random data";
@@ -296,6 +313,7 @@ void EraseTab::finish() {
                           target_path_);
     }
     updateButtons();
+    emit operationFinished();
 }
 
 void EraseTab::onSaveReport() {

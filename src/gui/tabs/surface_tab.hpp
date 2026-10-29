@@ -52,6 +52,7 @@ public:
     void startScan();
 
 signals:
+    void operationFinished();
     void logEvent(platter::gui::Severity s, const QString& message, const QString& device);
 
 private slots:
@@ -79,6 +80,7 @@ private:
 
     // Target
     QString target_path_;
+    QString range_identity_;
     QString target_label_;
     bool target_is_image_ = false;
     std::uint32_t target_sector_ = 512;

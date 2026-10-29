@@ -9,6 +9,7 @@
 #include "../mainwindow/device_entry.hpp"
 
 class QLabel;
+class QComboBox;
 class QPushButton;
 class QStandardItemModel;
 class QTableView;
@@ -39,6 +40,7 @@ public:
     explicit SmartTab(QWidget* parent = nullptr);
     void setDevice(const DeviceEntry* e);
     void setBusy(bool busy);
+    QString deviceType() const;
     void saveState();
 
 signals:
@@ -46,6 +48,7 @@ signals:
 
 private:
     QPushButton* query_;
+    QComboBox* device_type_;
     QLabel* status_;
     QLabel* health_;
     QStandardItemModel* attrs_;

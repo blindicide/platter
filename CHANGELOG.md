@@ -8,6 +8,12 @@ platter follows semantic versioning from 1.0. Before 1.0 each milestone was a mi
   shows them and needs an extra tick ("I understand ... will be locked and dismounted"); the CLI needs
   `--dismount-volumes`. The Windows backend already locks and dismounts the disk's volumes and aborts
   if one is in use. On Linux, and for the system disk and encryption/RAID holders, it stays a refusal.
+- Erase, Surface and Benchmark tabs have a "Partition..." button that fills Start/End LBA from a
+  partition (or the whole device). It uses the partition table already read in the Partitions tab
+  and reads nothing from the device itself.
+- Erase, Surface and Benchmark tabs have a "Partition..." button that fills Start/End LBA from a
+  partition (or the whole device). It uses the partition table already read in the Partitions tab
+  and reads nothing from the device itself.
 - The Windows package bundles smartctl (smartmontools, GPL-2.0+, unmodified, run as a separate process)
   in `smartmontools\`; platter looks there before PATH and the default install directory.
 

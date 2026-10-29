@@ -51,7 +51,9 @@ disposable HDD / USB stick, with the important drive unplugged).
   `Preview::mounted` + `AuthorizeOptions::acknowledge_dismount` + `Request::backend_dismounts_volumes`
   (true only on Windows); GUI checkbox in `ConfirmDialog`, CLI `--dismount-volumes`. authorize() also
   refuses if a volume appeared after the preview. Still TODO: refuse only for volumes that overlap the
-  chosen range, and a partition picker in the Surface/Benchmark/Erase/Qualify/Imaging tabs.
+  chosen range (needs volume -> disk-extent lookups; the dismount ack still covers the whole disk).
+  Partition picker: `PartitionPickButton` (widgets/partition_pick_button.*) in Erase/Surface/Benchmark
+  fills Start/End LBA from `DeviceEntry::table`; Imaging and Qualify do not have it yet.
 - smartctl is bundled into the Windows package by CI (`Bundle smartctl` step, choco). `find_smartctl()`
   order: $PLATTER_SMARTCTL, `<exe dir>/smartmontools/smartctl(.exe)`, `<exe dir>/smartctl(.exe)`, PATH,
   default install dirs. The CI step is unverified until the next Windows run; check the choco package

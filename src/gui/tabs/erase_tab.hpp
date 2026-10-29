@@ -24,6 +24,8 @@ class HistoryStore;
 
 namespace platter::gui {
 
+class PartitionPickButton;
+
 // ERASE tab (spec §9): overwrite erasure with verification. Starting always
 // goes through confirm_and_authorize(): preview, typed confirmation, identity
 // re-check, exclusive lease.
@@ -75,6 +77,7 @@ private:
     QLineEdit* pattern_;
     QComboBox* verify_;
     QLineEdit* start_lba_;
+    PartitionPickButton* pick_ = nullptr;
     QLineEdit* end_lba_;
 
     QPushButton* start_;

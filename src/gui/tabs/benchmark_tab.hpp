@@ -28,6 +28,8 @@ class HistoryStore;
 
 namespace platter::gui {
 
+class PartitionPickButton;
+
 class Chart;
 
 // BENCHMARK tab (spec §7): configure and run read benchmarks, watch live
@@ -99,6 +101,7 @@ private:
     QLineEdit* sizes_;
     QLineEdit* qds_;
     QLineEdit* start_lba_;
+    PartitionPickButton* pick_ = nullptr;
     QLineEdit* end_lba_;
     QCheckBox* direct_;
 

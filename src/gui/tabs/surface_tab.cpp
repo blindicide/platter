@@ -2,6 +2,7 @@
 #include "../i18n/i18n.hpp"
 #include "surface_tab.hpp"
 #include "../widgets/confirm_dialog.hpp"
+#include "../widgets/partition_pick_button.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -151,6 +152,8 @@ QWidget* SurfaceTab::buildSettings() {
     end_lba_->setPlaceholderText(tr("end of device"));
     f->addRow(tr("Start LBA:"), start_lba_);
     f->addRow(tr("End LBA:"), end_lba_);
+    pick_ = new PartitionPickButton(start_lba_, end_lba_, QString(), box);
+    f->addRow(QString(), pick_);
 
     block_ = new QComboBox(box);
     for (auto b : kBlockSizes)
@@ -333,12 +336,14 @@ void SurfaceTab::setDevice(const DeviceEntry* e) {
         target_path_.clear();
         target_label_.clear();
         target_lbas_ = 0;
+        pick_->setDevice(nullptr);
     } else {
         target_path_ = QString::fromStdString(e->info.path);
         target_label_ = e->displayName();
         target_is_image_ = e->is_image;
         target_sector_ = e->is_image ? e->image_sector_size : e->info.logical_sector_size;
         target_lbas_ = e->info.total_lbas();
+        pick_->setDevice(e);
         end_lba_->setPlaceholderText(target_lbas_ ? tr("end (%1)").arg(target_lbas_ - 1) : tr("end of device"));
     }
     updateButtons();
@@ -406,7 +411,7 @@ std::optional<ScanConfig> SurfaceTab::readConfig(QString& error) const {
 
 void SurfaceTab::setSettingsEnabled(bool on) {
     pattern_->setEnabled(on && mode_->currentIndex() != 0);
-    for (QWidget* w : std::initializer_list<QWidget*>{mode_, start_lba_, end_lba_, block_, order_, retries_, on_error_,
+    for (QWidget* w : std::initializer_list<QWidget*>{mode_, start_lba_, end_lba_, pick_, block_, order_, retries_, on_error_,
                                                      direct_, defaults_, thr_[0], thr_[1], thr_[2], thr_[3]})
         w->setEnabled(on);
     sample_->setEnabled(on && order_->currentIndex() == 3);

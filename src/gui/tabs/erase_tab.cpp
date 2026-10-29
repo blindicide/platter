@@ -22,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include "../widgets/confirm_dialog.hpp"
+#include "../widgets/partition_pick_button.hpp"
 #include "platter/reports/erase_report.hpp"
 #include "platter/storage/history.hpp"
 
@@ -84,6 +85,8 @@ EraseTab::EraseTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(this)) 
     end_lba_->setPlaceholderText(tr("end of device"));
     f->addRow(tr("Start LBA:"), start_lba_);
     f->addRow(tr("End LBA:"), end_lba_);
+    pick_ = new PartitionPickButton(start_lba_, end_lba_, QString(), box);
+    f->addRow(QString(), pick_);
     auto* note = new QLabel(tr("Leave both LBAs blank to erase the WHOLE device. Overwriting cannot reach blocks the "
                                "drive has remapped (flash wear levelling, reallocated sectors); the report says so. "
                                "Hardware secure erase / sanitize is not offered."),
@@ -136,6 +139,7 @@ void EraseTab::setDevice(const DeviceEntry* e) {
     if (!e) {
         target_path_.clear();
         target_label_.clear();
+        pick_->setDevice(nullptr);
         status_->setText(tr("No device selected."));
     } else {
         target_path_ = QString::fromStdString(e->info.path);
@@ -143,6 +147,7 @@ void EraseTab::setDevice(const DeviceEntry* e) {
         target_is_image_ = e->is_image;
         target_sector_ = e->is_image ? e->image_sector_size : e->info.logical_sector_size;
         target_lbas_ = e->info.total_lbas();
+        pick_->setDevice(e);
         end_lba_->setPlaceholderText(target_lbas_ ? tr("end (%1)").arg(target_lbas_ - 1) : tr("end of device"));
         status_->setText(tr("Ready. Nothing is written until you confirm."));
     }
@@ -157,7 +162,7 @@ void EraseTab::onMethodChanged() {
 }
 
 void EraseTab::setSettingsEnabled(bool on) {
-    for (QWidget* w : std::initializer_list<QWidget*>{method_, verify_, start_lba_, end_lba_}) w->setEnabled(on);
+    for (QWidget* w : std::initializer_list<QWidget*>{method_, verify_, start_lba_, end_lba_, pick_}) w->setEnabled(on);
     if (on) onMethodChanged();
     else {
         passes_->setEnabled(false);

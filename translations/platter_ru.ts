@@ -5273,6 +5273,45 @@ The table on disk may be inconsistent. Re-read it before doing anything else.</s
     </message>
 </context>
 <context>
+    <name>platter::gui::PartitionPickButton</name>
+    <message>
+        <source>Partition...</source>
+        <translation>Раздел...</translation>
+    </message>
+    <message>
+        <source>Fill in Start LBA and End LBA from a partition of the selected device. Uses the partition table already read in the Partitions tab; nothing is read from the device here.</source>
+        <translation>Подставить начальный и конечный LBA из раздела выбранного устройства. Используется таблица разделов, уже прочитанная на вкладке «Разделы»; с устройства здесь ничего не читается.</translation>
+    </message>
+    <message>
+        <source>%1: %2, %3 (LBA %4 - %5)</source>
+        <translation>%1: %2, %3 (LBA %4 – %5)</translation>
+    </message>
+    <message>
+        <source>Partition</source>
+        <translation>Раздел</translation>
+    </message>
+    <message>
+        <source>The partition table has not been read yet. Open the Partitions tab and read it first; then choose again.</source>
+        <translation>Таблица разделов ещё не прочитана. Откройте вкладку «Разделы», прочитайте её и повторите выбор.</translation>
+    </message>
+    <message>
+        <source>The partition table uses a different sector size than the device; enter the LBAs by hand.</source>
+        <translation>Таблица разделов использует другой размер сектора, чем устройство; введите LBA вручную.</translation>
+    </message>
+    <message>
+        <source>The partition table has no partitions.</source>
+        <translation>В таблице разделов нет разделов.</translation>
+    </message>
+    <message>
+        <source>Whole device</source>
+        <translation>Всё устройство</translation>
+    </message>
+    <message>
+        <source>Use the LBA range of:</source>
+        <translation>Использовать диапазон LBA раздела:</translation>
+    </message>
+</context>
+<context>
     <name>platter::gui::PartitionsTab</name>
     <message>
         <source>&amp;Read Partition Table</source>

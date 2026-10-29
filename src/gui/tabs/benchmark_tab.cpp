@@ -2,6 +2,7 @@
 #include "../i18n/i18n.hpp"
 #include "benchmark_tab.hpp"
 #include "../widgets/confirm_dialog.hpp"
+#include "../widgets/partition_pick_button.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -182,6 +183,8 @@ QWidget* BenchmarkTab::buildSettings() {
     end_lba_->setPlaceholderText(tr("end of device"));
     f->addRow(tr("Start LBA:"), start_lba_);
     f->addRow(tr("End LBA:"), end_lba_);
+    pick_ = new PartitionPickButton(start_lba_, end_lba_, QStringLiteral("0"), box);
+    f->addRow(QString(), pick_);
 
     direct_ = new QCheckBox(tr("Direct I/O (bypass OS cache)"), box);
     direct_->setChecked(true);
@@ -317,12 +320,14 @@ void BenchmarkTab::setDevice(const DeviceEntry* e) {
         target_path_.clear();
         target_label_.clear();
         target_key_.clear();
+        pick_->setDevice(nullptr);
     } else {
         target_path_ = QString::fromStdString(e->info.path);
         target_label_ = e->displayName();
         target_is_image_ = e->is_image;
         target_sector_ = e->is_image ? e->image_sector_size : e->info.logical_sector_size;
         target_key_ = storage::HistoryStore::device_key(e->info);
+        pick_->setDevice(e);
         end_lba_->setPlaceholderText(e->info.total_lbas() ? tr("end (%1)").arg(e->info.total_lbas() - 1) : tr("end of device"));
     }
     if (!shown_) status_->setText(e ? tr("Ready: %1 (read-only).").arg(target_label_) : tr("No device selected."));
@@ -388,7 +393,7 @@ std::optional<BenchConfig> BenchmarkTab::readConfig(QString& error) const {
 }
 
 void BenchmarkTab::setSettingsEnabled(bool on) {
-    for (QWidget* w : std::initializer_list<QWidget*>{kind_, duration_, start_lba_, end_lba_, direct_}) w->setEnabled(on);
+    for (QWidget* w : std::initializer_list<QWidget*>{kind_, duration_, start_lba_, end_lba_, pick_, direct_}) w->setEnabled(on);
     onKindChanged();
 }
 

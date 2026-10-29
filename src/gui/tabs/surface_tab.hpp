@@ -25,6 +25,8 @@ class HistoryStore;
 
 namespace platter::gui {
 
+class PartitionPickButton;
+
 class SurfaceMap;
 
 // SURFACE tab (spec §6): configure, run, pause, stop a READ surface scan,
@@ -96,6 +98,7 @@ private:
     QComboBox* mode_;
     QLineEdit* pattern_;
     QLineEdit* start_lba_;
+    PartitionPickButton* pick_ = nullptr;
     QLineEdit* end_lba_;
     QComboBox* block_;
     QComboBox* order_;

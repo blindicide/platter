@@ -142,6 +142,7 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/log_model.cpp
         gui/widgets/table_tools.cpp
         gui/widgets/partition_bar.cpp
+        gui/widgets/partition_pick_button.cpp
         gui/tabs/tabs.cpp
         gui/tabs/surface_tab.cpp
         gui/tabs/benchmark_tab.cpp
@@ -164,6 +165,7 @@ if(PLATTER_BUILD_GUI)
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
         gui/widgets/partition_bar.hpp
+        gui/widgets/partition_pick_button.hpp
         gui/widgets/history_dialog.hpp
         gui/widgets/preferences_dialog.hpp
         gui/widgets/help_dialog.hpp

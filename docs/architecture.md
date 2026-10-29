@@ -59,5 +59,5 @@
 | safety gate (`core/safety`), erase (`src/erase`), write scans / write benchmarks | v0.4 (done) |
 | partition editing (`partitions/partition_edit`), native FAT32/exFAT format (`src/mkfs`) | v0.5 (done) |
 | imaging / cloning, zstd (`src/imaging`) | v0.6 (done) |
-| hex inspector, qualification, SQLite history (`src/storage`) | v0.7 |
+| hex inspector (`src/inspect`), qualification (`src/qualify`), history browser (`src/storage`) | v0.7 (done) |
 | privileged helper (Linux), privilege separation | v0.8 |

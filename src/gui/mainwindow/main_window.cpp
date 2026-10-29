@@ -30,6 +30,10 @@
 
 #include "../tabs/benchmark_tab.hpp"
 #include "../tabs/erase_tab.hpp"
+#include "../tabs/hex_tab.hpp"
+#include "../widgets/checksum_dialog.hpp"
+#include "../widgets/history_dialog.hpp"
+#include "../tabs/qualify_tab.hpp"
 #include "../tabs/surface_tab.hpp"
 #include "../tabs/tabs.hpp"
 #include "../widgets/log_model.hpp"
@@ -92,6 +96,8 @@ MainWindow::~MainWindow() {
     if (bench_tab_) bench_tab_->stopAndWait();
     if (erase_tab_) erase_tab_->stopAndWait();
     if (imaging_tab_) imaging_tab_->stopAndWait();
+    if (hex_tab_) hex_tab_->stopAndWait();
+    if (qualify_tab_) qualify_tab_->stopAndWait();
     for (auto& t : workers())
         if (t) t->wait();
 }
@@ -169,6 +175,7 @@ void MainWindow::buildActions() {
         if (surface_tab_) surface_tab_->setHistory(history_.get(), on);
         if (erase_tab_) erase_tab_->setHistory(history_.get(), on);
         if (imaging_tab_) imaging_tab_->setHistory(history_.get(), on);
+        if (qualify_tab_) qualify_tab_->setHistory(history_.get(), on);
     });
 
     act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
@@ -178,6 +185,7 @@ void MainWindow::buildActions() {
         show_serials_ = on;
         if (erase_tab_) erase_tab_->setShowSerials(on);
         if (imaging_tab_) imaging_tab_->setShowSerials(on);
+        if (qualify_tab_) qualify_tab_->setShowSerials(on);
         showCurrent();
     });
 
@@ -191,7 +199,6 @@ void MainWindow::buildMenus() {
     auto* file = menuBar()->addMenu(tr("&File"));
     file->addAction(act_open_image_);
     file->addAction(act_save_report_);
-    file->addAction(planned(tr("&Export Results..."), QStringLiteral("v0.2")));
     file->addSeparator();
     file->addAction(act_exit_);
 
@@ -202,12 +209,16 @@ void MainWindow::buildMenus() {
     dev->addAction(act_smart_);
     dev->addAction(act_caps_);
     dev->addAction(act_partitions_);
-    dev->addAction(planned(tr("Re&scan Device"), QStringLiteral("v0.7")));
 
     auto* ops = menuBar()->addMenu(tr("&Operations"));
     ops->addAction(act_surface_);
     ops->addAction(act_benchmark_);
-    ops->addAction(planned(tr("&Partition Manager..."), QStringLiteral("v0.5")));
+    {
+        auto* a = new QAction(tr("&Partition Manager..."), this);
+        a->setStatusTip(tr("Edit the partition table and format partitions (asks for typed confirmation)"));
+        connect(a, &QAction::triggered, this, &MainWindow::editPartitions);
+        ops->addAction(a);
+    }
     ops->addSeparator();
     {
         auto* a = new QAction(tr("&Erase Device..."), this);
@@ -215,15 +226,49 @@ void MainWindow::buildMenus() {
         connect(a, &QAction::triggered, this, [this] { selectTab(QStringLiteral("ERASE")); });
         ops->addAction(a);
     }
-    ops->addAction(planned(tr("&Clone Device..."), QStringLiteral("v0.6")));
-    ops->addAction(planned(tr("Create Disk &Image..."), QStringLiteral("v0.6")));
+    auto imaging_action = [this, ops](const QString& text, const QString& tip, int mode) {
+        auto* a = new QAction(text, this);
+        a->setStatusTip(tip);
+        connect(a, &QAction::triggered, this, [this, mode] {
+            selectTab(QStringLiteral("CLONE / IMAGE"));
+            imaging_tab_->selectMode(mode);
+        });
+        ops->addAction(a);
+    };
+    imaging_action(tr("&Clone Device..."), tr("Copy the selected device onto another (asks for typed confirmation)"), 2);
+    imaging_action(tr("Create Disk &Image..."), tr("Read the selected device into an image file"), 0);
+    {
+        auto* a = new QAction(tr("&Qualify Drive..."), this);
+        a->setStatusTip(tr("Burn-in: write passes, read-back, read pass, random reads (asks for typed confirmation)"));
+        connect(a, &QAction::triggered, this, [this] { selectTab(QStringLiteral("QUALIFY")); });
+        ops->addAction(a);
+    }
 
     auto* tools = menuBar()->addMenu(tr("&Tools"));
-    tools->addAction(planned(tr("&Hex Sector Viewer"), QStringLiteral("v0.7")));
-    tools->addAction(planned(tr("&Checksum Calculator"), QStringLiteral("v0.6")));
-    tools->addAction(planned(tr("Image &Verification"), QStringLiteral("v0.6")));
-    tools->addAction(planned(tr("Drive &Qualification..."), QStringLiteral("v0.7")));
-    tools->addAction(planned(tr("Operation &History"), QStringLiteral("v0.7")));
+    {
+        auto* hex = new QAction(tr("&Hex Sector Viewer"), this);
+        hex->setStatusTip(tr("Inspect sectors read-only, with structure interpretation and search"));
+        connect(hex, &QAction::triggered, this, [this] { selectTab(QStringLiteral("HEX")); });
+        tools->addAction(hex);
+        auto* sum = new QAction(tr("&Checksum Calculator..."), this);
+        sum->setStatusTip(tr("SHA-256 of any file"));
+        connect(sum, &QAction::triggered, this, [this] {
+            ChecksumDialog dlg(this);
+            dlg.exec();
+        });
+        tools->addAction(sum);
+        auto* ver = new QAction(tr("Image &Verification"), this);
+        ver->setStatusTip(tr("Check an image against its checksum or against a device"));
+        connect(ver, &QAction::triggered, this, [this] {
+            selectTab(QStringLiteral("CLONE / IMAGE"));
+            imaging_tab_->selectMode(3);
+        });
+        tools->addAction(ver);
+        auto* hist = new QAction(tr("Operation &History..."), this);
+        hist->setStatusTip(tr("Browse every saved benchmark, scan, erase, imaging and qualification report"));
+        connect(hist, &QAction::triggered, this, &MainWindow::showHistory);
+        tools->addAction(hist);
+    }
 
     auto* settings = menuBar()->addMenu(tr("&Settings"));
     settings->addAction(act_show_serials_);
@@ -325,15 +370,18 @@ void MainWindow::buildCentral() {
     tabs_->addTab(erase_tab_, tr("ERASE"));
     connect(erase_tab_, &EraseTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
+    qualify_tab_ = new QualifyTab(tabs_);
+    tabs_->addTab(qualify_tab_, tr("QUALIFY"));
+    connect(qualify_tab_, &QualifyTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     imaging_tab_ = new ImagingTab(tabs_);
     tabs_->addTab(imaging_tab_, tr("CLONE / IMAGE"));
     connect(imaging_tab_, &ImagingTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
-    tabs_->addTab(new PlannedTab(tr("Hex Sector Inspector"), QStringLiteral("v0.7"),
-                                 tr("Offset / hex / ASCII view with jump-to-LBA, search and structure "
-                                    "interpreters for MBR, GPT, FAT, NTFS and ext4."),
-                                 tabs_),
-                  tr("HEX"));
+    hex_tab_ = new HexTab(tabs_);
+    tabs_->addTab(hex_tab_, tr("HEX"));
+    connect(hex_tab_, &HexTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(log_tab_, tr("LOG"));
     connect(smart_tab_, &SmartTab::queryRequested, this, &MainWindow::querySmart);
     connect(part_tab_, &PartitionsTab::readRequested, this, &MainWindow::readPartitions);
@@ -399,6 +447,7 @@ void MainWindow::openHistory() {
     surface_tab_->setHistory(history_.get(), record_history_);
     erase_tab_->setHistory(history_.get(), record_history_);
     imaging_tab_->setHistory(history_.get(), record_history_);
+    qualify_tab_->setHistory(history_.get(), record_history_);
 }
 
 void MainWindow::restoreSettings() {
@@ -411,7 +460,7 @@ void MainWindow::restoreSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning()) {
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning() || qualify_tab_->isRunning()) {
         const auto answer = QMessageBox::question(this, tr("Operation Running"),
                                                   tr("A scan, benchmark or erase is still running. Stop it and exit?"),
                                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -423,6 +472,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
         bench_tab_->stopAndWait();
         erase_tab_->stopAndWait();
         imaging_tab_->stopAndWait();
+        qualify_tab_->stopAndWait();
     }
     QSettings s;
     s.setValue(QStringLiteral("window/geometry"), saveGeometry());
@@ -547,6 +597,8 @@ void MainWindow::showCurrent() {
     erase_tab_->setDevice(e);
     imaging_tab_->setDevice(e);
     imaging_tab_->setChoices(devices_);
+    hex_tab_->setDevice(e);
+    qualify_tab_->setDevice(e);
     updateSummary();
     const bool has = e != nullptr;
     act_save_report_->setEnabled(has);
@@ -721,10 +773,17 @@ void MainWindow::readPartitions() {
     });
 }
 
+void MainWindow::showHistory() {
+    const auto* e = current();
+    HistoryDialog dlg(history_.get(), e ? QString::fromStdString(storage::HistoryStore::device_key(e->info)) : QString(),
+                      show_serials_, this);
+    dlg.exec();
+}
+
 void MainWindow::editPartitions() {
     auto* e = current();
     if (!e || busy_parts_) return;
-    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning()) {
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning() || qualify_tab_->isRunning()) {
         QMessageBox::information(this, tr("Partition Manager"), tr("Wait for the running operation to finish first."));
         return;
     }
@@ -787,8 +846,10 @@ void MainWindow::selectTab(const QString& name) {
 void MainWindow::about() {
     QMessageBox::about(this, tr("About platter"),
                        tr("<b>platter %1</b><br>Storage diagnostics, maintenance and management utility.<br><br>"
-                          "This build is <b>read-only</b>: it identifies devices, reads SMART data via "
-                          "smartmontools and inspects partition tables, and never writes to a device.<br><br>"
+                          "It identifies devices, reads SMART data via smartmontools, scans surfaces, runs "
+                          "benchmarks and inspects sectors without writing anything. Erasing, qualifying, "
+                          "partitioning, formatting, restoring and cloning WRITE to a device, and each one "
+                          "shows a preview and asks for a typed confirmation first.<br><br>"
                           "No telemetry. No network access. No registration.")
                            .arg(QString::fromLatin1(kVersion)));
 }

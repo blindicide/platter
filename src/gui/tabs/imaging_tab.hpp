@@ -44,6 +44,8 @@ public:
     void setShowSerials(bool on) { show_serial_ = on; }
     bool isRunning() const;
     void stopAndWait();
+    // 0 create, 1 restore, 2 clone, 3 verify
+    void selectMode(int mode);
 
 signals:
     void logEvent(platter::gui::Severity s, const QString& message, const QString& device);

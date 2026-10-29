@@ -185,6 +185,12 @@ void ImagingTab::setDevice(const DeviceEntry* e) {
     updateButtons();
 }
 
+void ImagingTab::selectMode(int mode) {
+    if (isRunning()) return;
+    const int idx = mode_->findData(mode);
+    if (idx >= 0) mode_->setCurrentIndex(idx);
+}
+
 void ImagingTab::setChoices(const std::vector<DeviceEntry>& devices) {
     const auto keep = other_->currentData().toString();
     choices_.clear();

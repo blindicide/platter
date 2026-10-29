@@ -47,6 +47,16 @@ add_library(platter-partitions STATIC partitions/partition_table.cpp partitions/
 target_link_libraries(platter-partitions PUBLIC platter-core)
 platter_set_warnings(platter-partitions)
 
+# ------------------------------------------------------------- platter-inspect
+add_library(platter-inspect STATIC inspect/inspect.cpp)
+target_link_libraries(platter-inspect PUBLIC platter-core platter-partitions)
+platter_set_warnings(platter-inspect)
+
+# ------------------------------------------------------------ platter-qualify
+add_library(platter-qualify STATIC qualify/qualify.cpp)
+target_link_libraries(platter-qualify PUBLIC platter-core platter-smart)
+platter_set_warnings(platter-qualify)
+
 # ------------------------------------------------------------- platter-imaging
 add_library(platter-imaging STATIC imaging/image_file.cpp imaging/imaging.cpp)
 target_link_libraries(platter-imaging PUBLIC platter-core)
@@ -85,9 +95,9 @@ platter_set_warnings(platter-erase)
 
 # ------------------------------------------------------------- platter-reports
 add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp reports/bench_report.cpp
-    reports/erase_report.cpp reports/imaging_report.cpp)
+    reports/erase_report.cpp reports/imaging_report.cpp reports/qualify_report.cpp)
 target_link_libraries(platter-reports
-    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase platter-imaging
+    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase platter-imaging platter-qualify
            nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
@@ -98,9 +108,9 @@ platter_set_warnings(platter-storage)
 
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
-    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp cli/cmd_imaging.cpp)
+    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp cli/cmd_imaging.cpp cli/cmd_inspect.cpp cli/cmd_qualify.cpp cli/cmd_history.cpp)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
-        platter-benchmark platter-erase platter-mkfs platter-imaging platter-reports platter-storage)
+        platter-benchmark platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()
@@ -119,25 +129,33 @@ if(PLATTER_BUILD_GUI)
         gui/tabs/benchmark_tab.cpp
         gui/tabs/erase_tab.cpp
         gui/tabs/imaging_tab.cpp
+        gui/tabs/hex_tab.cpp
+        gui/tabs/qualify_tab.cpp
         gui/widgets/surface_map.cpp
         gui/widgets/chart.cpp
         gui/widgets/confirm_dialog.cpp
         gui/widgets/partition_editor.cpp
+        gui/widgets/history_dialog.cpp
+        gui/widgets/checksum_dialog.cpp
         gui/mainwindow/main_window.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
         gui/widgets/partition_bar.hpp
+        gui/widgets/history_dialog.hpp
+        gui/widgets/checksum_dialog.hpp
         gui/tabs/tabs.hpp
         gui/tabs/surface_tab.hpp
         gui/tabs/benchmark_tab.hpp
         gui/tabs/erase_tab.hpp
+        gui/tabs/hex_tab.hpp
+        gui/tabs/qualify_tab.hpp
         gui/widgets/surface_map.hpp
         gui/widgets/chart.hpp
         gui/mainwindow/main_window.hpp
     )
     target_link_libraries(platter-gui PRIVATE
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
-        platter-erase platter-mkfs platter-imaging platter-reports platter-storage)
+        platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-gui)
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

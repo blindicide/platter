@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "platter/core/error.hpp"
 #include "platter/erase/erase.hpp"
 #include "platter/imaging/imaging.hpp"
+#include "platter/qualify/qualify.hpp"
 #include "platter/smart/smart.hpp"
 #include "platter/surface/surface_scan.hpp"
 
@@ -24,6 +26,8 @@ namespace platter::storage {
 
 enum class SessionKind : std::uint8_t { benchmark, surface_scan, smart, erase, imaging, qualification };
 std::string_view session_kind_name(SessionKind k) noexcept;
+inline constexpr int kSessionKindCount = 6;
+std::optional<SessionKind> parse_session_kind(std::string_view s) noexcept;
 
 struct SessionSummary {
     std::int64_t id = 0;
@@ -69,6 +73,7 @@ public:
     Result<std::int64_t> record_smart(const DeviceInfo& d, const smart::Report& r, const smart::Assessment& a);
     Result<std::int64_t> record_erase(const erase::EraseResult& r);
     Result<std::int64_t> record_imaging(const imaging::ImagingResult& r);
+    Result<std::int64_t> record_qualification(const qualify::QualifyResult& r);
     // Generic path for sessions whose typed loader lives elsewhere (imaging,
     // qualification): the JSON document is stored verbatim, so callers must
     // already have removed serial numbers from it.
@@ -79,6 +84,13 @@ public:
 
     // Newest first. Empty device_key = all devices.
     Result<std::vector<SessionSummary>> list(SessionKind kind, const std::string& device_key = {}, int limit = 200);
+    // Every kind at once, newest first (the history browser). Empty device_key = all devices.
+    Result<std::vector<SessionSummary>> list_all(const std::string& device_key = {}, int limit = 500);
+    // One session by id (ids are unique across kinds).
+    Result<SessionSummary> find(std::int64_t id);
+    // Human-readable report for any session. Serial numbers appear only if asked for
+    // and only where the stored document has them (documents are stored without).
+    Result<std::string> render_text(const SessionSummary& s, bool include_serial = false);
     Result<std::vector<DeviceRecord>> devices();
 
     Result<bench::BenchResult> load_benchmark(std::int64_t id);
@@ -86,6 +98,7 @@ public:
     Result<std::string> load_smart_json(std::int64_t id);
     Result<erase::EraseResult> load_erase(std::int64_t id);
     Result<imaging::ImagingResult> load_imaging(std::int64_t id);
+    Result<qualify::QualifyResult> load_qualification(std::int64_t id);
     Result<std::string> load_document(SessionKind kind, std::int64_t id);
 
     Status remove(SessionKind kind, std::int64_t id);

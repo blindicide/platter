@@ -60,12 +60,25 @@ jobs:
           $cli clone smoke.img cloned.img --confirm cloned.img -q
           cmp smoke.img cloned.img
 
+      - name: CLI inspect / qualify smoke test (temp images only)
+        run: |
+          cli=./build/src/platter-cli
+          $cli hex smoke.img --lba 1 | grep -q "EFI PART"
+          $cli find smoke.img --ascii "EFI PART" | grep -q "2 matches"
+          truncate -s 8M qual.img
+          export PLATTER_HISTORY_DB="$PWD/history.db"
+          $cli qualify run qual.img --confirm qual.img --passes 1 --samples 16 --no-smart --save -q
+          $cli history list | grep -q qualification
+          $cli qualify history | grep -q PASS
+
       - name: GUI smoke test (offscreen screenshot)
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           ./build/src/platter-gui smoke.img --tab PARTITIONS --size 1000x700 --screenshot gui-linux.png
           test -s gui-linux.png
+          ./build/src/platter-gui smoke.img --tab HEX --size 1000x700 --screenshot gui-hex.png
+          test -s gui-hex.png
 
       - uses: actions/upload-artifact@v4
         with:

@@ -8,6 +8,7 @@
 #include "mainwindow/main_window.hpp"
 #include "widgets/partition_editor.hpp"
 #include "tabs/benchmark_tab.hpp"
+#include "tabs/hex_tab.hpp"
 #include "tabs/surface_tab.hpp"
 #include "platter/version.hpp"
 #include "styles/classic_theme.hpp"
@@ -46,7 +47,9 @@ int main(int argc, char** argv) {
     QCommandLineOption editor_shot({QStringLiteral("editor-screenshot")},
                                    QStringLiteral("Render the partition manager for the first image to FILE and exit."),
                                    QStringLiteral("file"));
-    cli.addOptions({editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+    QCommandLineOption hex_lba({QStringLiteral("hex-lba")}, QStringLiteral("Read this LBA in the HEX tab (testing)."),
+                               QStringLiteral("lba"));
+    cli.addOptions({hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
                     compare});
     cli.process(app);
 
@@ -70,6 +73,7 @@ int main(int argc, char** argv) {
     for (const auto& img : cli.positionalArguments()) w.openImage(img, ss);
     if (cli.isSet(select)) w.selectIndex(cli.value(select).toInt());
     if (cli.isSet(tab)) w.selectTab(cli.value(tab));
+    if (cli.isSet(hex_lba)) w.hexTab()->showLba(cli.value(hex_lba).toULongLong());
     if (cli.isSet(smart_now)) w.querySmartNow();
     if (cli.isSet(open_scan)) w.surfaceTab()->openScanFile(cli.value(open_scan));
     if (cli.isSet(start_scan)) w.surfaceTab()->startScan();

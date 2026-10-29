@@ -14,6 +14,7 @@
 #include "platter/reports/bench_report.hpp"
 #include "platter/reports/erase_report.hpp"
 #include "platter/reports/imaging_report.hpp"
+#include "platter/reports/qualify_report.hpp"
 #include "platter/reports/scan_report.hpp"
 
 namespace fs = std::filesystem;
@@ -30,6 +31,12 @@ std::string_view session_kind_name(SessionKind k) noexcept {
         case SessionKind::qualification: return "qualification";
     }
     return "?";
+}
+
+std::optional<SessionKind> parse_session_kind(std::string_view s) noexcept {
+    for (int i = 0; i < kSessionKindCount; ++i)
+        if (session_kind_name(static_cast<SessionKind>(i)) == s) return static_cast<SessionKind>(i);
+    return std::nullopt;
 }
 
 namespace {
@@ -352,6 +359,19 @@ Result<std::int64_t> HistoryStore::record_imaging(const imaging::ImagingResult& 
                                  static_cast<double>(r.bytes), reports::imaging_to_json(r));
 }
 
+Result<std::int64_t> HistoryStore::record_qualification(const qualify::QualifyResult& r) {
+    double avg = 0;
+    int n = 0;
+    for (const auto& s : r.stages)
+        if (s.kind == qualify::StageKind::write && s.avg_mbps > 0) {
+            avg += s.avg_mbps;
+            ++n;
+        }
+    return impl_->insert_session(SessionKind::qualification, r.device, std::to_string(r.config.write_passes) + " pass",
+                                 r.started_utc, std::string(operation_state_name(r.state)), reports::qualify_headline(r),
+                                 n ? avg / n : 0.0, reports::qualify_to_json(r));
+}
+
 Result<std::int64_t> HistoryStore::record_document(SessionKind kind, const DeviceInfo& d, const std::string& subtype,
                                                    const std::string& started_utc, const std::string& state,
                                                    const std::string& headline, double primary_value,
@@ -417,10 +437,110 @@ Result<erase::EraseResult> HistoryStore::load_erase(std::int64_t id) {
     return reports::erase_from_json(*doc);
 }
 
+Result<std::vector<SessionSummary>> HistoryStore::list_all(const std::string& device_key, int limit) {
+    Stmt st(impl_->db,
+            "SELECT s.id, s.kind, s.subtype, d.key, d.model, s.started_utc, s.state, s.headline, s.primary_value "
+            "FROM sessions s JOIN devices d ON d.id = s.device_id "
+            "WHERE (?1 = '' OR d.key = ?1) "
+            "ORDER BY s.started_utc DESC, s.id DESC LIMIT ?2");
+    if (!st.ok()) return db_error(impl_->db, "prepare list", st.rc());
+    st.bind(1, device_key).bind(2, static_cast<std::int64_t>(limit));
+    std::vector<SessionSummary> out;
+    int rc;
+    while ((rc = st.step()) == SQLITE_ROW) {
+        SessionSummary s;
+        s.id = st.i64(0);
+        const auto kind = parse_session_kind(st.text(1));
+        if (!kind) continue;  // written by a newer version: not ours to show
+        s.kind = *kind;
+        s.subtype = st.text(2);
+        s.device_key = st.text(3);
+        s.device_model = st.text(4);
+        s.started_utc = st.text(5);
+        s.state = st.text(6);
+        s.headline = st.text(7);
+        s.primary_value = st.real(8);
+        out.push_back(std::move(s));
+    }
+    if (rc != SQLITE_DONE) return db_error(impl_->db, "list sessions", rc);
+    return out;
+}
+
+Result<SessionSummary> HistoryStore::find(std::int64_t id) {
+    Stmt st(impl_->db,
+            "SELECT s.id, s.kind, s.subtype, d.key, d.model, s.started_utc, s.state, s.headline, s.primary_value "
+            "FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = ?1");
+    if (!st.ok()) return db_error(impl_->db, "prepare find", st.rc());
+    st.bind(1, id);
+    const int rc = st.step();
+    if (rc == SQLITE_DONE) return Error{Errc::not_found, "no session with id " + std::to_string(id)};
+    if (rc != SQLITE_ROW) return db_error(impl_->db, "find session", rc);
+    const auto kind = parse_session_kind(st.text(1));
+    if (!kind) return Error{Errc::unsupported, "session " + std::to_string(id) + " was written by a newer platter (" + st.text(1) + ")"};
+    SessionSummary s;
+    s.id = st.i64(0);
+    s.kind = *kind;
+    s.subtype = st.text(2);
+    s.device_key = st.text(3);
+    s.device_model = st.text(4);
+    s.started_utc = st.text(5);
+    s.state = st.text(6);
+    s.headline = st.text(7);
+    s.primary_value = st.real(8);
+    return s;
+}
+
+Result<std::string> HistoryStore::render_text(const SessionSummary& s, bool include_serial) {
+    const reports::Privacy priv{include_serial};
+    switch (s.kind) {
+        case SessionKind::benchmark: {
+            auto r = load_benchmark(s.id);
+            if (!r) return r.error();
+            return reports::bench_to_text(*r, priv);
+        }
+        case SessionKind::surface_scan: {
+            auto r = load_scan(s.id);
+            if (!r) return r.error();
+            return reports::scan_to_text(*r, priv);
+        }
+        case SessionKind::erase: {
+            auto r = load_erase(s.id);
+            if (!r) return r.error();
+            return reports::erase_to_text(*r, priv);
+        }
+        case SessionKind::imaging: {
+            auto r = load_imaging(s.id);
+            if (!r) return r.error();
+            return imaging::result_to_text(*r, include_serial);
+        }
+        case SessionKind::qualification: {
+            auto r = load_qualification(s.id);
+            if (!r) return r.error();
+            return qualify::result_to_text(*r, include_serial);
+        }
+        case SessionKind::smart: {
+            auto doc = load_smart_json(s.id);
+            if (!doc) return doc.error();
+            try {
+                return nlohmann::json::parse(*doc).dump(2);
+            } catch (...) {
+                return *doc;
+            }
+        }
+    }
+    return Error{Errc::unsupported, "unknown session kind"};
+}
+
 Result<imaging::ImagingResult> HistoryStore::load_imaging(std::int64_t id) {
     auto doc = impl_->document(SessionKind::imaging, id);
     if (!doc) return doc.error();
     return reports::imaging_from_json(*doc);
+}
+
+Result<qualify::QualifyResult> HistoryStore::load_qualification(std::int64_t id) {
+    auto doc = impl_->document(SessionKind::qualification, id);
+    if (!doc) return doc.error();
+    return reports::qualify_from_json(*doc);
 }
 
 Result<std::string> HistoryStore::load_document(SessionKind kind, std::int64_t id) { return impl_->document(kind, id); }

@@ -59,11 +59,16 @@ Read-only commands:
   image create <device> <file>  Copy a device to an image (raw, or zstd for *.zst)
   image verify <file>           Check an image's checksum (--against DEVICE compares)
   image history | image show <id>  Saved imaging sessions
+  hex <device>                  Hex dump of sectors, with structure interpretation
+  find <device>                 Search for a byte pattern, ASCII or UTF-16 text
+  history list [<device>]       Every saved session (--kind K, --limit N); history show <id>; history delete <id>
+  qualify history | show <id>   Saved qualification reports
   partitions types              List partition type names
   version                       Print version
 
 Destructive commands (preview first; typed confirmation required):
   erase run <device>            Overwrite erase with verification
+  qualify run <device>          Burn-in: write passes + read-back, final read, random reads, SMART delta
   erase methods                 List erase methods
   erase history                 Saved erase reports
   erase show <id>               Show a saved erase report
@@ -153,6 +158,8 @@ Erase options (erase run):
   --report FILE         Also write the text report
 
 History (SQLite; off unless asked):
+  --lba N --offset BYTES --sectors N --as KIND   hex: where to look (KIND: auto mbr gpt-header gpt-entries fat exfat ntfs mft ext)
+  --hex P --ascii T --utf16 T --ignore-case      find: what to look for (P like "55 AA ?? 0F"); --start/--end LBA, --limit N
   --save                Record this benchmark / scan / SMART query in history
   --history-db FILE     History database (default: per-user data directory)
   --limit N             Rows for 'benchmark history' (default 30)
@@ -174,10 +181,15 @@ const std::set<std::string> kValueOptions = {
     "--method", "--passes", "--pattern", "--verify", "--confirm", "--range", "--label", "--mode",
     "--table", "--offset", "--type", "--name", "--attributes", "--fs", "--partition", "--cluster-size",
     // imaging
-    "--compress", "--level", "--against", "--sha256", "--expect-sha256", "--target-offset"};
+    "--compress", "--level", "--against", "--sha256", "--expect-sha256", "--target-offset",
+    // inspector
+    "--lba", "--sectors", "--hex", "--ascii", "--utf16", "--as",
+    // qualification
+    "--samples", "--slow-ms", "--kind"};
 const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run",
                                              "--bootable", "--no-bootable", "--logical", "--extended",
-                                             "--sparse", "--force", "--recover", "--no-verify", "--no-sidecar", "--use-sidecar"};
+                                             "--sparse", "--force", "--recover", "--no-verify", "--no-sidecar", "--use-sidecar",
+                                             "--ignore-case", "--no-interpret", "--no-final-read", "--no-smart"};
 
 std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
     Options o;
@@ -1033,6 +1045,36 @@ int main(int argc, char** argv) {
         }
         return usage_error("usage: erase run <device> | erase methods | erase history | erase show <id>");
     }
+    if (cmd == "history") {
+        const char* usage = "usage: history list [<device>] | history show <id> | history delete <id>";
+        if (!arg(1)) return usage_error(usage);
+        const std::string sub = *arg(1);
+        if (sub == "list") return cmd_history_list(*opts, arg(2));
+        if (sub == "show") {
+            if (!arg(2)) return usage_error("history show needs a session id");
+            return cmd_history_show(*opts, *arg(2));
+        }
+        if (sub == "delete") {
+            if (!arg(2)) return usage_error("history delete needs a session id");
+            return cmd_history_delete(*opts, *arg(2));
+        }
+        return usage_error(usage);
+    }
+    if (cmd == "qualify") {
+        const char* usage = "usage: qualify run <device> | qualify history | qualify show <id>";
+        if (!arg(1)) return usage_error(usage);
+        const std::string sub = *arg(1);
+        if (sub == "run") {
+            if (!arg(2)) return usage_error("qualify run needs a <device>");
+            return cmd_qualify_run(*opts, *arg(2));
+        }
+        if (sub == "history") return cmd_qualify_history(*opts);
+        if (sub == "show") {
+            if (!arg(2)) return usage_error("qualify show needs a session id");
+            return cmd_qualify_show(*opts, *arg(2));
+        }
+        return usage_error(usage);
+    }
     if (cmd == "image") {
         const char* usage = "usage: image create <device> <file> | image restore <file> <device> | image verify <file> | image history | image show <id>";
         if (!arg(1)) return usage_error(usage);
@@ -1063,6 +1105,14 @@ int main(int argc, char** argv) {
     if (cmd == "format") {
         if (!arg(1)) return usage_error("format needs a <device>");
         return cmd_format(*opts, *arg(1));
+    }
+    if (cmd == "hex") {
+        if (!arg(1)) return usage_error("hex needs a <device>");
+        return cmd_hex(*opts, *arg(1));
+    }
+    if (cmd == "find") {
+        if (!arg(1)) return usage_error("find needs a <device>");
+        return cmd_find(*opts, *arg(1));
     }
     if (cmd == "smart") {
         if (!arg(1) || *arg(1) != "show") return usage_error("usage: smart show <device>");

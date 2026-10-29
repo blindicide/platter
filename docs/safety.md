@@ -112,6 +112,14 @@ Both can verify by reading the target back; a mismatch is reported as `VERIFICAT
 are zero-filled, counted, listed and flagged in the verdict. Image files are written to
 `<name>.partial` and renamed on success.
 
+## Qualification and inspection (v0.7)
+
+Drive qualification is destructive and uses `Kind::qualification`, confirmed for exactly one
+range (the span that will be written). `Qualification` refuses any other kind or range count.
+Hex viewing and searching are read-only: they open devices `read_only`, and the GUI HEX tab
+only reads when you press *Go* (selecting a device in the list never reads it). The history
+browser and `history delete` only touch the local SQLite database.
+
 ## Testing rules
 
 - Unit and integration tests use sparse image files in temp directories.

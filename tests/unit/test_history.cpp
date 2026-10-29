@@ -213,3 +213,43 @@ TEST_CASE("default path honours PLATTER_HISTORY_DB", "[history]") {
     const auto p = HistoryStore::default_path();
     CHECK(p.find("history.db") != std::string::npos);
 }
+
+TEST_CASE("list_all merges every kind newest first and find/render_text work", "[history]") {
+    TempDir tmp;
+    auto store = HistoryStore::open((tmp / "h.db").string());
+    REQUIRE(store);
+    auto& s = **store;
+    const auto a = s.record_benchmark(bench_result(100, "2026-01-01T00:00:00Z"));
+    REQUIRE(a);
+    const auto b = s.record_document(SessionKind::imaging, disk(), "create", "2026-02-01T00:00:00Z", "completed",
+                                     "image made", 1.0, R"({"x":1})");
+    REQUIRE(b);
+    CHECK(*b != *a);  // ids are unique across kinds
+
+    auto all = s.list_all();
+    REQUIRE(all);
+    REQUIRE(all->size() == 2);
+    CHECK((*all)[0].id == *b);  // newest first
+    CHECK((*all)[1].id == *a);
+    CHECK(s.list_all("id:no-such-device")->empty());
+
+    auto one = s.find(*a);
+    REQUIRE(one);
+    CHECK(one->kind == SessionKind::benchmark);
+    CHECK_FALSE(s.find(987654));
+
+    auto text = s.render_text(*one);
+    REQUIRE(text);
+    CHECK_FALSE(text->empty());
+    CHECK(text->find("WD-WCC6Y1234567") == std::string::npos);  // serials are never stored
+}
+
+TEST_CASE("parse_session_kind round-trips the names", "[history]") {
+    for (int i = 0; i < kSessionKindCount; ++i) {
+        const auto k = static_cast<SessionKind>(i);
+        const auto parsed = parse_session_kind(session_kind_name(k));
+        REQUIRE(parsed);
+        CHECK(*parsed == k);
+    }
+    CHECK_FALSE(parse_session_kind("nonsense"));
+}

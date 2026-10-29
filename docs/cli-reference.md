@@ -35,6 +35,12 @@ platter-cli [options] <command> [arguments]
 | `benchmark history [<device>]` | Lists saved benchmark sessions (newest first), optionally for one device. | No |
 | `benchmark show <id>` | Re-prints a saved session (text, or JSON with `--json`; `--chart` works too). | No |
 | `smart show <device>` | Runs `smartctl --json=c -a` and prints attributes / NVMe health log plus a conservative assessment with every contributing observation. | Usually yes |
+| `hex <device>` | Hex dump of one or more sectors (`--lba N` or `--offset BYTES`, `--sectors N` up to 256), with the structure found there decoded (MBR, GPT header/entries, FAT/exFAT/NTFS boot sectors, NTFS MFT record, ext superblock). `--as KIND` forces an interpretation, `--no-interpret` turns it off, `--json` for machine output. Read-only. | Yes for physical devices |
+| `find <device>` | Searches a range for `--hex BYTES`, `--ascii TEXT` or `--utf16 TEXT` (`--ignore-case`, `--start/--end`, `--limit N` matches). Read-only. | Yes for physical devices |
+| `qualify run <device>` | **Destructive.** Drive qualification (burn-in): write passes, read-back after each, a final read pass, random-read sampling and a SMART before/after comparison, ending in a PASS / PASS WITH WARNINGS / FAIL / INCOMPLETE verdict. See below. | Yes |
+| `qualify history` / `qualify show <id>` | Saved qualification reports. | No |
+| `history list [<device>]` | Every saved session of every kind, newest first (`--kind benchmark\|surface_scan\|smart\|erase\|imaging\|qualification`, `--limit N`). | No |
+| `history show <id>` / `history delete <id>` | Re-print a saved session (`--json` for the stored document) / delete the saved record (never touches a device). | No |
 | `version` | Prints the version. | No |
 
 `<device>` may be:
@@ -268,3 +274,30 @@ platter-cli clone /dev/sdb /dev/sdc --dry-run
   comparison failed.
 * Not included: resuming an interrupted copy, reverse/trimming passes and a rescue log as in
   `ddrescue`, partition/file-system resizing when the target is larger.
+
+### Inspecting sectors
+
+```sh
+platter-cli hex disk.img                      # sector 0, MBR decoded
+platter-cli hex disk.img --lba 1 --as gpt-header
+platter-cli find disk.img --ascii "NTFS" --limit 5
+platter-cli find /dev/sdb --utf16 "Documents and Settings" --ignore-case   # read-only
+```
+
+Both commands only ever open the device read-only. A read error on a sector is shown as
+an error for that sector and the command carries on.
+
+### Qualification (`qualify run <device>`)
+
+**Destructive**: it overwrites the *whole* device (or `--start/--end`) several times, so it
+goes through the full typed-confirmation pipeline ([safety.md](safety.md)). Stages: N write
+passes (`--passes 1..4`, default 2; random data from a seeded stream, the next pass writes
+the complement), a read-back after each pass (`--no-verify` skips), a final read
+(`--no-final-read` skips), `--samples N` random single-block reads (0 skips) and a SMART
+comparison before/after (`--no-smart` skips; images have no SMART). `--block-size`,
+`--slow-ms` tune the block size and what counts as a slow request. `--report FILE`, `--json`
+and `--save` work as for erase. Exit codes: 0 pass (including with warnings), 15 completed
+with errors, 16 verdict FAIL, 13 cancelled.
+
+The verdict thresholds (slow-request fractions, tail-vs-head throughput, SMART deltas) are
+engineering judgment, not a standard; the report lists every observation that contributed.

@@ -34,4 +34,18 @@ int cmd_image_history(const Options& o);
 int cmd_image_show(const Options& o, const std::string& id_text);
 int cmd_clone(const Options& o, const std::string& source, const std::string& target);
 
+// cmd_history.cpp
+int cmd_history_list(const Options& o, const std::string* device);
+int cmd_history_show(const Options& o, const std::string& id_text);
+int cmd_history_delete(const Options& o, const std::string& id_text);
+
+// cmd_qualify.cpp
+int cmd_qualify_run(const Options& o, const std::string& target);
+int cmd_qualify_history(const Options& o);
+int cmd_qualify_show(const Options& o, const std::string& id_text);
+
+// cmd_inspect.cpp
+int cmd_hex(const Options& o, const std::string& target);
+int cmd_find(const Options& o, const std::string& target);
+
 }  // namespace platter::cli

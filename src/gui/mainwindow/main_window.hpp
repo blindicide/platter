@@ -28,6 +28,8 @@ class SurfaceTab;
 class BenchmarkTab;
 class EraseTab;
 class ImagingTab;
+class HexTab;
+class QualifyTab;
 class LogTab;
 
 class MainWindow final : public QMainWindow {
@@ -46,6 +48,7 @@ public:
     void selectIndex(int index);
     void querySmartNow() { querySmart(); }
     SurfaceTab* surfaceTab() const { return surface_tab_; }
+    HexTab* hexTab() const { return hex_tab_; }
     BenchmarkTab* benchmarkTab() const { return bench_tab_; }
 
 protected:
@@ -57,6 +60,7 @@ private slots:
     void querySmart();
     void readPartitions();
     void editPartitions();
+    void showHistory();
     void openImageDialog();
     void saveReport();
     void about();
@@ -92,6 +96,8 @@ private:
     BenchmarkTab* bench_tab_ = nullptr;
     EraseTab* erase_tab_ = nullptr;
     ImagingTab* imaging_tab_ = nullptr;
+    HexTab* hex_tab_ = nullptr;
+    QualifyTab* qualify_tab_ = nullptr;
     std::unique_ptr<storage::HistoryStore> history_;
     bool record_history_ = true;
     LogTab* log_tab_ = nullptr;

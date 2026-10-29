@@ -36,12 +36,37 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.6 Imaging / cloning — feature-complete in code, never run on real hardware**
-(see "v0.6 so far"). Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.7 Inspector / qualification / history browser — feature-complete in code, never run on real hardware**
+(see "v0.7 so far"). Previously: **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.7 so far
+- **Inspector** `include/platter/inspect/inspect.hpp`, `src/inspect/inspect.cpp` (lib
+  `platter-inspect`): `hex_dump`, `interpret` (StructKind mbr / gpt_header / gpt_entries /
+  fat_boot / exfat_boot / ntfs_boot / ntfs_mft_record / ext_superblock, auto-detected by
+  content), and `search` (bytes, ASCII, UTF-16LE, case-insensitive option, matches across
+  block boundaries). All read-only; tests `tests/unit/test_inspect.cpp`.
+- **Qualification** `include/platter/qualify/qualify.hpp`, `src/qualify/qualify.cpp` (lib
+  `platter-qualify`): `Qualification` operation (AuthorizedTarget kind `qualification`, one
+  range). Stages: N write passes (seeded random, next pass = complement), read-back per pass,
+  final read, random-read ("seek") sampling; SMART before/after delta supplied by the caller.
+  Verdict pass / pass_with_warnings / fail / incomplete; thresholds live in `QualifyConfig`
+  and are judgment calls, NOT calibrated on real drives. Report `reports/qualify_report.*`
+  (schema `qualify-report`); `HistoryStore::record_qualification/load_qualification`.
+  Tests `tests/unit/test_qualify.cpp` (slow limits set to 60 s there so loaded CI boxes
+  don't produce timing warnings).
+- **History** `HistoryStore::list_all / find / render_text`, `parse_session_kind`; CLI
+  `history list|show|delete` (`src/cli/cmd_history.cpp`); GUI `HistoryDialog`
+  (`src/gui/widgets/history_dialog.*`, Tools > Operation History).
+- **CLI**: `hex`, `find` (`cmd_inspect.cpp`), `qualify run|history|show` (`cmd_qualify.cpp`).
+- **GUI**: HEX tab (reads only on explicit Go, never merely on selection), QUALIFY tab,
+  `ChecksumDialog` (Tools > Checksum Calculator), the previously "planned" menu items are
+  live (Partition Manager, Clone, Create Image, Image Verification, Qualify). The GUI
+  was only exercised with `QT_QPA_PLATFORM=offscreen`.
+- Hardware secure erase (ATA Secure Erase / NVMe format) is deliberately NOT implemented.
 
 ### v0.6 so far
 - **Image files** `include/platter/imaging/image_file.hpp`, `src/imaging/image_file.cpp`:
@@ -400,9 +425,8 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. (v0.6 done)
-   v0.7 hex inspector / qualification / history browser, v0.8 privilege
-   separation, v0.9 settings and polish, v1.0 release prep (see sections below
+2. (v0.7 done)
+   v0.8 privilege separation, v0.9 settings and polish, v1.0 release prep (see sections below
    as they get filled in).
 
 ## 3. Layout

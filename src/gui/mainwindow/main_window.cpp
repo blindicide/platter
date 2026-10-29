@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "main_window.hpp"
 
 #include "../tabs/imaging_tab.hpp"
@@ -24,6 +25,7 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableView>
 #include <QThread>
@@ -91,7 +93,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), log_(new LogModel
     restoreSettings();
 
     log_->add(Severity::info, tr("platter %1 started (%2 privileges; destructive operations ask for typed confirmation)")
-                                  .arg(QString::fromLatin1(kVersion), qs(privilege_label())));
+                                  .arg(QString::fromLatin1(kVersion), i18n::ct(privilege_label())));
     prefs_ = Preferences::load();
     openHistory();
     applyPreferences(prefs_, /*startup=*/true);
@@ -350,6 +352,13 @@ void MainWindow::buildToolBar() {
     tb->addAction(act_save_report_);
 }
 
+namespace {
+void addKeyedTab(QTabWidget* tabs, QWidget* page, const QString& key, const QString& title) {
+    const int i = tabs->addTab(page, title);
+    tabs->tabBar()->setTabData(i, key);
+}
+}  // namespace
+
 void MainWindow::buildCentral() {
     auto* central = new QWidget(this);
     auto* col = new QVBoxLayout(central);
@@ -390,34 +399,34 @@ void MainWindow::buildCentral() {
     smart_tab_ = new SmartTab(tabs_);
     part_tab_ = new PartitionsTab(tabs_);
     log_tab_ = new LogTab(log_, tabs_);
-    tabs_->addTab(info_tab_, tr("INFO"));
-    tabs_->addTab(smart_tab_, tr("SMART"));
+    addKeyedTab(tabs_, info_tab_, QStringLiteral("INFO"), tr("INFO"));
+    addKeyedTab(tabs_, smart_tab_, QStringLiteral("SMART"), tr("SMART"));
     surface_tab_ = new SurfaceTab(tabs_);
-    tabs_->addTab(surface_tab_, tr("SURFACE"));
+    addKeyedTab(tabs_, surface_tab_, QStringLiteral("SURFACE"), tr("SURFACE"));
     connect(surface_tab_, &SurfaceTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     bench_tab_ = new BenchmarkTab(tabs_);
-    tabs_->addTab(bench_tab_, tr("BENCHMARK"));
+    addKeyedTab(tabs_, bench_tab_, QStringLiteral("BENCHMARK"), tr("BENCHMARK"));
     connect(bench_tab_, &BenchmarkTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
-    tabs_->addTab(part_tab_, tr("PARTITIONS"));
+    addKeyedTab(tabs_, part_tab_, QStringLiteral("PARTITIONS"), tr("PARTITIONS"));
     erase_tab_ = new EraseTab(tabs_);
-    tabs_->addTab(erase_tab_, tr("ERASE"));
+    addKeyedTab(tabs_, erase_tab_, QStringLiteral("ERASE"), tr("ERASE"));
     connect(erase_tab_, &EraseTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     qualify_tab_ = new QualifyTab(tabs_);
-    tabs_->addTab(qualify_tab_, tr("QUALIFY"));
+    addKeyedTab(tabs_, qualify_tab_, QStringLiteral("QUALIFY"), tr("QUALIFY"));
     connect(qualify_tab_, &QualifyTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     imaging_tab_ = new ImagingTab(tabs_);
-    tabs_->addTab(imaging_tab_, tr("CLONE / IMAGE"));
+    addKeyedTab(tabs_, imaging_tab_, QStringLiteral("CLONE / IMAGE"), tr("CLONE / IMAGE"));
     connect(imaging_tab_, &ImagingTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     hex_tab_ = new HexTab(tabs_);
-    tabs_->addTab(hex_tab_, tr("HEX"));
+    addKeyedTab(tabs_, hex_tab_, QStringLiteral("HEX"), tr("HEX"));
     connect(hex_tab_, &HexTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
-    tabs_->addTab(log_tab_, tr("LOG"));
+    addKeyedTab(tabs_, log_tab_, QStringLiteral("LOG"), tr("LOG"));
     connect(smart_tab_, &SmartTab::queryRequested, this, &MainWindow::querySmart);
     connect(part_tab_, &PartitionsTab::readRequested, this, &MainWindow::readPartitions);
     connect(part_tab_, &PartitionsTab::editRequested, this, &MainWindow::editPartitions);
@@ -454,7 +463,7 @@ void MainWindow::buildStatusBar() {
     st_device_ = mk(tr("No device"));
     st_mode_ = mk(tr("CONFIRM TO WRITE"));
     st_mode_->setToolTip(tr("Nothing is written to a device without a preview and a typed confirmation"));
-    st_priv_ = mk(tr("Privileges: %1").arg(qs(privilege_label())));
+    st_priv_ = mk(tr("Privileges: %1").arg(i18n::ct(privilege_label())));
     st_priv_->setToolTip(running_elevated() ? tr("Running elevated")
                                             : tr("Reading sectors and SMART data from physical disks usually "
                                                  "needs root / Administrator"));
@@ -472,7 +481,7 @@ void MainWindow::openHistory() {
     auto store = storage::HistoryStore::open(path);
     if (!store) {
         log_->add(Severity::warning,
-                  tr("History database unavailable (%1); results will not be saved").arg(qs(store.error().describe())));
+                  tr("History database unavailable (%1); results will not be saved").arg(i18n::err(store.error())));
     } else {
         history_ = std::move(store).value();
         log_->add(Severity::debug, tr("History database: %1").arg(QString::fromStdString(path)));
@@ -543,7 +552,7 @@ void MainWindow::refreshDevices() {
     std::vector<DeviceEntry> next;
     auto devs = enumerate_devices();
     if (!devs) {
-        log_->add(Severity::error, tr("Device enumeration failed: %1").arg(qs(devs.error().describe())));
+        log_->add(Severity::error, tr("Device enumeration failed: %1").arg(i18n::err(devs.error())));
     } else {
         for (auto& d : *devs) {
             DeviceEntry e;
@@ -591,8 +600,8 @@ void MainWindow::openImage(const QString& path, std::uint32_t sector_size) {
     }
     auto dev = open_image(p, {}, sector_size);
     if (!dev) {
-        log_->add(Severity::error, tr("Cannot open image: %1").arg(qs(dev.error().describe())), path);
-        QMessageBox::warning(this, tr("Open Disk Image"), qs(dev.error().describe()));
+        log_->add(Severity::error, tr("Cannot open image: %1").arg(i18n::err(dev.error())), path);
+        QMessageBox::warning(this, tr("Open Disk Image"), i18n::err(dev.error()));
         return;
     }
     DeviceEntry e;
@@ -654,9 +663,9 @@ void MainWindow::updateSummary() {
         return;
     }
     const auto& d = e->info;
-    set(sum_model_, qs(d.vendor.empty() || d.vendor == "ATA" ? d.model : d.vendor + " " + d.model));
-    set(sum_capacity_, qs(format_capacity(d.capacity_bytes)));
-    set(sum_iface_, QStringLiteral("%1 / %2").arg(qs(bus_type_name(d.bus)), qs(media_kind_name(d.media))));
+    set(sum_model_, d.bus == BusType::image ? i18n::ct(d.model) : qs(d.vendor.empty() || d.vendor == "ATA" ? d.model : d.vendor + " " + d.model));
+    set(sum_capacity_, i18n::units(qs(format_capacity(d.capacity_bytes))));
+    set(sum_iface_, QStringLiteral("%1 / %2").arg(i18n::ct(bus_type_name(d.bus)), i18n::ct(media_kind_name(d.media))));
     set(sum_geometry_, tr("%1 x %2 B (phys %3 B)")
                            .arg(d.total_lbas())
                            .arg(d.logical_sector_size)
@@ -676,7 +685,7 @@ void MainWindow::updateSummary() {
     set(sum_usage_, usage);
     set(sum_temp_, e->smart && e->smart->temperature_c ? tr("%1 °C").arg(*e->smart->temperature_c) : QString());
     const auto h = e->health ? e->health->status : smart::Health::unknown;
-    sum_health_->setText(e->is_image ? tr("N/A") : qs(smart::health_name(h)));
+    sum_health_->setText(e->is_image ? tr("N/A") : i18n::ct(smart::health_name(h)));
     switch (h) {
         case smart::Health::good: sum_health_->setObjectName(QStringLiteral("healthGood")); break;
         case smart::Health::warning: sum_health_->setObjectName(QStringLiteral("healthWarning")); break;
@@ -712,7 +721,7 @@ void MainWindow::querySmart() {
                 }
                 auto& entry = self->devices_[static_cast<std::size_t>(idx)];
                 if (!rep) {
-                    entry.smart_error = qs(rep.error().describe());
+                    entry.smart_error = i18n::err(rep.error());
                     self->log_->add(Severity::error, tr("SMART query failed: %1").arg(entry.smart_error), qs(path));
                 } else {
                     entry.smart_error.clear();
@@ -722,12 +731,12 @@ void MainWindow::querySmart() {
                     const auto sev = entry.health->status == smart::Health::critical ? Severity::critical
                                      : entry.health->status == smart::Health::warning ? Severity::warning
                                                                                       : Severity::info;
-                    self->log_->add(sev, tr("SMART health: %1").arg(qs(smart::health_name(entry.health->status))),
+                    self->log_->add(sev, tr("SMART health: %1").arg(i18n::ct(smart::health_name(entry.health->status))),
                                     qs(path));
                     if (self->history_ && self->record_history_) {
                         if (auto id = self->history_->record_smart(entry.info, *entry.smart, *entry.health); !id)
                             self->log_->add(Severity::warning,
-                                            tr("SMART snapshot not saved: %1").arg(qs(id.error().describe())), qs(path));
+                                            tr("SMART snapshot not saved: %1").arg(i18n::err(id.error())), qs(path));
                     }
                 }
                 self->showCurrent();
@@ -743,13 +752,13 @@ void MainWindow::readPartitionsNow() {
     oo.mode = OpenMode::read_only;
     auto dev = e->is_image ? open_image(e->info.path, oo, e->image_sector_size) : open_device(e->info.path, oo);
     if (!dev) {
-        e->table_error = tr("Cannot open device: %1").arg(qs(dev.error().describe()));
+        e->table_error = tr("Cannot open device: %1").arg(i18n::err(dev.error()));
         log_->add(Severity::error, e->table_error, qs(e->info.path));
         return;
     }
     auto t = partitions::read_partition_table(**dev);
     if (!t) {
-        e->table_error = qs(t.error().describe());
+        e->table_error = i18n::err(t.error());
         log_->add(Severity::error, tr("Partition table read failed: %1").arg(e->table_error), qs(e->info.path));
         return;
     }
@@ -791,7 +800,7 @@ void MainWindow::readPartitions() {
                 if (idx >= 0) {
                     auto& entry = self->devices_[static_cast<std::size_t>(idx)];
                     if (!result) {
-                        entry.table_error = qs(result.error().describe());
+                        entry.table_error = i18n::err(result.error());
                         self->log_->add(Severity::error, tr("Partition table read failed: %1").arg(entry.table_error),
                                         qs(path));
                     } else {
@@ -854,6 +863,8 @@ void MainWindow::applyPreferences(const Preferences& p, bool startup) {
             }
         }
     }
+    if (!startup && p.language != old.language)
+        QMessageBox::information(this, tr("Language"), tr("The new language is used the next time platter starts."));
     if (!startup && p.history_db != old.history_db)
         log_->add(Severity::info, tr("The history database location changes after restarting platter"));
     if (startup && p.helper_at_startup && !running_elevated()) {
@@ -868,8 +879,8 @@ bool MainWindow::useHelper(const QString& spec) {
     std::string note;
     const bool on = !spec.isEmpty() && spec != QStringLiteral("none");
     if (auto s = platter::helper::configure_helper(spec.toStdString(), platter::helper::executable_dir(), note); !s) {
-        QMessageBox::warning(this, tr("Privileged Helper"), qs(s.error().describe()));
-        log_->add(Severity::warning, tr("Privileged helper not enabled"), qs(s.error().describe()));
+        QMessageBox::warning(this, tr("Privileged Helper"), i18n::err(s.error()));
+        log_->add(Severity::warning, tr("Privileged helper not enabled"), i18n::err(s.error()));
         helper_on_ = false;
         return false;
     }
@@ -878,7 +889,7 @@ bool MainWindow::useHelper(const QString& spec) {
         QSignalBlocker block(act_helper_);
         act_helper_->setChecked(helper_on_);
     }
-    st_priv_->setText(helper_on_ ? tr("Privileges: user + helper") : tr("Privileges: %1").arg(qs(privilege_label())));
+    st_priv_->setText(helper_on_ ? tr("Privileges: user + helper") : tr("Privileges: %1").arg(i18n::ct(privilege_label())));
     log_->add(Severity::info, helper_on_ ? tr("Privileged helper enabled") : tr("Privileged helper off"), qs(note));
     return true;
 #else
@@ -953,8 +964,16 @@ void MainWindow::selectIndex(int index) {
 }
 
 void MainWindow::selectTab(const QString& name) {
-    for (int i = 0; i < tabs_->count(); ++i)
-        if (tabs_->tabText(i).remove(QLatin1Char('&')).compare(name, Qt::CaseInsensitive) == 0) tabs_->setCurrentIndex(i);
+    // Tabs are found by their untranslated key, so --tab HEX and the menu
+    // actions keep working in every language; the visible title also matches.
+    for (int i = 0; i < tabs_->count(); ++i) {
+        const auto key = tabs_->tabBar()->tabData(i).toString();
+        if (key.compare(name, Qt::CaseInsensitive) == 0 ||
+            tabs_->tabText(i).remove(QLatin1Char('&')).compare(name, Qt::CaseInsensitive) == 0) {
+            tabs_->setCurrentIndex(i);
+            return;
+        }
+    }
 }
 
 void MainWindow::about() {

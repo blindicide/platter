@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "history_dialog.hpp"
 
 #include <QComboBox>
@@ -33,7 +34,7 @@ HistoryDialog::HistoryDialog(storage::HistoryStore* store, const QString& device
     kind_->addItem(tr("All kinds"), -1);
     for (int i = 0; i < storage::kSessionKindCount; ++i) {
         const auto k = static_cast<storage::SessionKind>(i);
-        kind_->addItem(qs(storage::session_kind_name(k)), i);
+        kind_->addItem(i18n::ct(storage::session_kind_name(k)), i);
     }
     device_ = new QComboBox(this);
     device_->addItem(tr("All devices"), QString());
@@ -112,7 +113,7 @@ void HistoryDialog::reload() {
     const int kind = kind_->currentData().toInt();
     auto rows = kind < 0 ? store_->list_all(key, 1000) : store_->list(static_cast<storage::SessionKind>(kind), key, 1000);
     if (!rows) {
-        detail_->setPlainText(tr("Cannot read the history: %1").arg(qs(rows.error().describe())));
+        detail_->setPlainText(tr("Cannot read the history: %1").arg(i18n::err(rows.error())));
         onSelectionChanged();
         return;
     }
@@ -122,7 +123,7 @@ void HistoryDialog::reload() {
     for (const auto& r : rows_) {
         auto add = [&](int c, const QString& t) { table_->setItem(row, c, new QTableWidgetItem(t)); };
         add(0, QString::number(r.id));
-        add(1, qs(storage::session_kind_name(r.kind)));
+        add(1, i18n::ct(storage::session_kind_name(r.kind)));
         add(2, qs(r.started_utc));
         add(3, qs(r.device_model));
         add(4, qs(r.state));
@@ -140,7 +141,7 @@ void HistoryDialog::onSelectionChanged() {
     delete_->setEnabled(s != nullptr);
     if (!s) return;
     auto text = store_->render_text(*s, show_serial_);
-    detail_->setPlainText(text ? qs(*text) : tr("Cannot show this record: %1").arg(qs(text.error().describe())));
+    detail_->setPlainText(text ? qs(*text) : tr("Cannot show this record: %1").arg(i18n::err(text.error())));
 }
 
 void HistoryDialog::onSave() {
@@ -154,14 +155,14 @@ void HistoryDialog::onSave() {
     if (file.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
         auto doc = store_->load_document(s->kind, s->id);
         if (!doc) {
-            QMessageBox::warning(this, tr("Save Report"), qs(doc.error().describe()));
+            QMessageBox::warning(this, tr("Save Report"), i18n::err(doc.error()));
             return;
         }
         content = *doc;
     } else {
         auto text = store_->render_text(*s, show_serial_);
         if (!text) {
-            QMessageBox::warning(this, tr("Save Report"), qs(text.error().describe()));
+            QMessageBox::warning(this, tr("Save Report"), i18n::err(text.error()));
             return;
         }
         content = *text;
@@ -177,13 +178,13 @@ void HistoryDialog::onDelete() {
     const auto answer = QMessageBox::question(
         this, tr("Delete Record"),
         tr("Remove the saved %1 record #%2 (%3) from the history?\n\nThis only deletes the saved record. Nothing on any device is touched.")
-            .arg(qs(storage::session_kind_name(s->kind)))
+            .arg(i18n::ct(storage::session_kind_name(s->kind)))
             .arg(s->id)
             .arg(qs(s->headline)),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (answer != QMessageBox::Yes) return;
     if (auto r = store_->remove(s->kind, s->id); !r) {
-        QMessageBox::warning(this, tr("Delete Record"), qs(r.error().describe()));
+        QMessageBox::warning(this, tr("Delete Record"), i18n::err(r.error()));
         return;
     }
     reload();

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "benchmark_tab.hpp"
 #include "../widgets/confirm_dialog.hpp"
 
@@ -40,11 +41,10 @@ namespace {
 
 using namespace platter::bench;
 
-QString qs(std::string_view s) { return QString::fromUtf8(s.data(), static_cast<int>(s.size())); }
 
 QString size_text(std::uint64_t b) {
-    if (b >= (1ull << 30) && b % (1ull << 30) == 0) return QStringLiteral("%1 GiB").arg(b >> 30);
-    if (b >= (1u << 20) && b % (1u << 20) == 0) return QStringLiteral("%1 MiB").arg(b >> 20);
+    if (b >= (1ull << 30) && b % (1ull << 30) == 0) return i18n::units(QStringLiteral("%1 GiB").arg(b >> 30));
+    if (b >= (1u << 20) && b % (1u << 20) == 0) return i18n::units(QStringLiteral("%1 MiB").arg(b >> 20));
     if (b >= 1024 && b % 1024 == 0) return QStringLiteral("%1 KiB").arg(b >> 10);
     return QStringLiteral("%1 B").arg(b);
 }
@@ -133,7 +133,7 @@ QWidget* BenchmarkTab::buildSettings() {
     f->setLabelAlignment(Qt::AlignRight);
 
     kind_ = new QComboBox(box);
-    for (int k = 0; k < kBenchKindCount; ++k) kind_->addItem(qs(bench_kind_title(static_cast<BenchKind>(k))), k);
+    for (int k = 0; k < kBenchKindCount; ++k) kind_->addItem(i18n::ct(bench_kind_title(static_cast<BenchKind>(k))), k);
     f->addRow(tr("Test:"), kind_);
 
     block_ = new QComboBox(box);
@@ -193,7 +193,7 @@ QWidget* BenchmarkTab::buildSettings() {
     f->addRow(QString(), note);
 
     connect(kind_, qOverload<int>(&QComboBox::currentIndexChanged), this, &BenchmarkTab::onKindChanged);
-    box->setMaximumWidth(270);
+    box->setMaximumWidth(i18n::scale(270));
     return box;
 }
 
@@ -238,7 +238,7 @@ QWidget* BenchmarkTab::buildResults() {
     phases_view_->setModel(phases_);
     setup_table(phases_view_, QStringLiteral("bench.phases"), false);
     caveats_ = new QListWidget(res);
-    caveats_->setMaximumWidth(330);
+    caveats_->setMaximumWidth(i18n::scale(330));
     caveats_->setWordWrap(true);
     rl->addWidget(phases_view_, 3);
     rl->addWidget(caveats_, 2);
@@ -429,7 +429,8 @@ void BenchmarkTab::startBenchmark() {
         req.target.image_sector_size = target_sector_;
         req.ranges.push_back(LbaRange{cfg->start_lba, cfg->end_lba - cfg->start_lba + 1});
         req.summary = std::string(bench_kind_title(cfg->kind)) + " benchmark";
-        auto out = confirm_and_authorize(this, tr("Confirm Write Benchmark"), req, false);
+        auto out = confirm_and_authorize(this, tr("Confirm Write Benchmark"), req, false,
+                                         tr("%1 benchmark").arg(i18n::ct(bench_kind_title(cfg->kind))));
         if (out.cancelled) return;
         if (!out.target) {
             emit logEvent(Severity::error, tr("Write benchmark refused: %1").arg(out.error), target_path_);
@@ -441,7 +442,7 @@ void BenchmarkTab::startBenchmark() {
     } else {
         auto created = create_benchmark(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
         if (!created) {
-            const auto msg = QString::fromStdString(created.error().describe());
+            const auto msg = i18n::err(created.error());
             emit logEvent(Severity::error, tr("Cannot open device for benchmarking: %1").arg(msg), target_path_);
             QMessageBox::warning(this, tr("Benchmark"),
                                  tr("Cannot open %1 for reading:\n%2%3")
@@ -454,19 +455,19 @@ void BenchmarkTab::startBenchmark() {
         b = std::move(created).value();
     }
     if (auto v = b->validate(); !v) {
-        const auto msg = QString::fromStdString(v.error().describe());
+        const auto msg = i18n::err(v.error());
         emit logEvent(Severity::error, tr("Invalid benchmark settings: %1").arg(msg), target_path_);
         QMessageBox::warning(this, tr("Benchmark"), msg);
         return;
     }
     if (auto s = b->start(); !s) {
-        emit logEvent(Severity::error, QString::fromStdString(s.error().describe()), target_path_);
+        emit logEvent(Severity::error, i18n::err(s.error()), target_path_);
         return;
     }
     const auto& ec = b->config();
     emit logEvent(Severity::info,
                   tr("%1 started (block %2, QD %3, %4)")
-                      .arg(qs(bench_kind_title(ec.kind)), size_text(ec.block_bytes))
+                      .arg(i18n::ct(bench_kind_title(ec.kind)), size_text(ec.block_bytes))
                       .arg(ec.queue_depth)
                       .arg(ec.direct_io ? tr("direct I/O") : tr("buffered I/O")),
                   target_path_);
@@ -490,7 +491,7 @@ void BenchmarkTab::poll() {
     const auto p = bench_->progress();
     progress_->setValue(static_cast<int>(bench_->fraction() * 1000));
     status_->setText(tr("%1 on %2 ...  %3 %   %4 MB/s")
-                         .arg(qs(bench_kind_title(r.config.kind)), target_label_)
+                         .arg(i18n::ct(bench_kind_title(r.config.kind)), target_label_)
                          .arg(bench_->fraction() * 100.0, 0, 'f', 1)
                          .arg(p.current_bytes_per_sec / 1e6, 0, 'f', 1));
     showResult(r);
@@ -501,17 +502,17 @@ void BenchmarkTab::finish() {
     timer_->stop();
     const auto r = bench_->result();
     shown_ = r;
-    QString summary = tr("%1: %2").arg(qs(operation_state_name(r.state)), QString::fromStdString(r.headline()));
+    QString summary = tr("%1: %2").arg(i18n::ct(operation_state_name(r.state)), QString::fromStdString(r.headline()));
     if (r.state != OperationState::completed && !r.message.empty())
-        summary += QStringLiteral(" (") + QString::fromStdString(r.message) + QStringLiteral(")");
+        summary += QStringLiteral(" (") + i18n::ct(r.message) + QStringLiteral(")");
     status_->setText(summary);
     emit logEvent(r.state == OperationState::completed ? Severity::info : Severity::warning,
-                  tr("%1 finished: %2").arg(qs(bench_kind_title(r.config.kind)), summary), target_path_);
+                  tr("%1 finished: %2").arg(i18n::ct(bench_kind_title(r.config.kind)), summary), target_path_);
     if (r.state == OperationState::completed && history_ && record_) {
         auto id = history_->record_benchmark(r);
         if (id) hist_status_->setText(tr("Saved as #%1").arg(*id));
         else emit logEvent(Severity::warning, tr("Benchmark not saved to history: %1")
-                                                  .arg(QString::fromStdString(id.error().describe())), target_path_);
+                                                  .arg(i18n::err(id.error())), target_path_);
     }
     bench_.reset();
     progress_->setValue(1000);
@@ -523,11 +524,11 @@ void BenchmarkTab::finish() {
 // ------------------------------------------------------------------ display
 
 void BenchmarkTab::showResult(const BenchResult& r) {
-    headline_->setText(QStringLiteral("%1:  %2").arg(qs(bench_kind_title(r.config.kind)), QString::fromStdString(r.headline())));
+    headline_->setText(QStringLiteral("%1:  %2").arg(i18n::ct(bench_kind_title(r.config.kind)), QString::fromStdString(r.headline())));
     phases_->removeRows(0, phases_->rowCount());
     for (const auto& ph : r.phases) {
         const auto& m = ph.metrics;
-        auto* label = cell(QString::fromStdString(ph.label));
+        auto* label = cell(i18n::ct(ph.label));
         auto* err = num(static_cast<double>(m.errors), 0);
         if (m.errors) err->setForeground(QColor(0xC0, 0, 0));
         phases_->appendRow({label, cell(size_text(ph.block_bytes), true), num(ph.queue_depth, 0), num(m.mb_per_s, 1),
@@ -540,7 +541,7 @@ void BenchmarkTab::showResult(const BenchResult& r) {
     phases_view_->resizeColumnsToContents();
     caveats_->clear();
     if (r.warnings.empty()) caveats_->addItem(tr("No caveats."));
-    for (const auto& w : r.warnings) caveats_->addItem(QStringLiteral("! ") + QString::fromStdString(w));
+    for (const auto& w : r.warnings) caveats_->addItem(QStringLiteral("! ") + i18n::ct(w));
 
     // Chart choices depend on the kind.
     const auto prev = chart_kind_->currentData().toInt();
@@ -607,7 +608,7 @@ void BenchmarkTab::refreshChart() {
     };
     auto bars = [](const BenchResult& x, auto proj) {
         std::vector<std::pair<QString, double>> b;
-        for (const auto& p : x.phases) b.emplace_back(QString::fromStdString(p.label), proj(p.metrics));
+        for (const auto& p : x.phases) b.emplace_back(i18n::ct(p.label), proj(p.metrics));
         return b;
     };
 
@@ -687,7 +688,7 @@ void BenchmarkTab::refreshHistory() {
     }
     auto rows = history_->list(storage::SessionKind::benchmark, target_key_, 500);
     if (!rows) {
-        hist_status_->setText(QString::fromStdString(rows.error().describe()));
+        hist_status_->setText(i18n::err(rows.error()));
         return;
     }
     const auto kind = std::string(bench_kind_name(static_cast<BenchKind>(std::max(0, kind_->currentData().toInt()))));
@@ -718,7 +719,7 @@ void BenchmarkTab::onHistoryLoad() {
     const auto id = hist_model_->item(sel.front().row(), 0)->data(Qt::UserRole).toLongLong();
     auto r = history_->load_benchmark(id);
     if (!r) {
-        QMessageBox::warning(this, tr("History"), QString::fromStdString(r.error().describe()));
+        QMessageBox::warning(this, tr("History"), i18n::err(r.error()));
         return;
     }
     shown_ = std::move(r).value();
@@ -737,7 +738,7 @@ void BenchmarkTab::onHistoryDelete() {
                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
     if (auto s = history_->remove(storage::SessionKind::benchmark, id); !s)
-        QMessageBox::warning(this, tr("History"), QString::fromStdString(s.error().describe()));
+        QMessageBox::warning(this, tr("History"), i18n::err(s.error()));
     refreshHistory();
 }
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "surface_tab.hpp"
 #include "../widgets/confirm_dialog.hpp"
 
@@ -35,11 +36,10 @@ namespace {
 
 using namespace platter::surface;
 
-QString qs(std::string_view s) { return QString::fromUtf8(s.data(), static_cast<int>(s.size())); }
 
 QString ms_text(std::uint64_t us) { return QString::number(static_cast<double>(us) / 1000.0, 'f', 3) + QStringLiteral(" ms"); }
 
-QString rate_text(double bps) { return QString::number(bps / 1e6, 'f', 2) + QStringLiteral(" MB/s"); }
+QString rate_text(double bps) { return i18n::units(QString::number(bps / 1e6, 'f', 2) + QStringLiteral(" MB/s")); }
 
 QString hms(std::int64_t s) {
     return QStringLiteral("%1:%2:%3")
@@ -50,7 +50,7 @@ QString hms(std::int64_t s) {
 
 QString size_text(std::uint64_t bytes) {
     const auto s = format_capacity(bytes);
-    return QString::fromStdString(s.substr(0, s.find(" (")));
+    return i18n::units(QString::fromStdString(s.substr(0, s.find(" ("))));
 }
 
 QLabel* val(QWidget* parent) {
@@ -154,7 +154,7 @@ QWidget* SurfaceTab::buildSettings() {
 
     block_ = new QComboBox(box);
     for (auto b : kBlockSizes)
-        block_->addItem(b >= (1u << 20) ? QStringLiteral("%1 MiB").arg(b >> 20) : QStringLiteral("%1 KiB").arg(b >> 10), b);
+        block_->addItem(i18n::units(b >= (1u << 20) ? QStringLiteral("%1 MiB").arg(b >> 20) : QStringLiteral("%1 KiB").arg(b >> 10)), b);
     f->addRow(tr("Block size:"), block_);
 
     order_ = new QComboBox(box);
@@ -197,7 +197,7 @@ QWidget* SurfaceTab::buildSettings() {
     for (int i = 0; i < 4; ++i) {
         thr_[i] = new QSpinBox(thr_box);
         thr_[i]->setRange(1, 3'600'000);
-        thr_[i]->setSuffix(QStringLiteral(" ms"));
+        thr_[i]->setSuffix(tr(" ms"));
         tl->addWidget(swatch(i + 1, thr_box), i, 0);
         tl->addWidget(new QLabel(QStringLiteral("<"), thr_box), i, 1);
         tl->addWidget(thr_[i], i, 2);
@@ -211,7 +211,7 @@ QWidget* SurfaceTab::buildSettings() {
     defaults_ = new QPushButton(tr("Defaults"), box);
     connect(defaults_, &QPushButton::clicked, this, &SurfaceTab::resetDefaults);
     f->addRow(QString(), defaults_);
-    box->setMaximumWidth(260);
+    box->setMaximumWidth(i18n::scale(260));
     return box;
 }
 
@@ -303,7 +303,7 @@ QWidget* SurfaceTab::buildInfoPanel() {
     add(c, cbox, tr("Tested at:"), sel_time_);
     v->addWidget(cbox);
     v->addStretch(1);
-    panel->setMaximumWidth(260);
+    panel->setMaximumWidth(i18n::scale(260));
     return panel;
 }
 
@@ -453,7 +453,8 @@ void SurfaceTab::startScan() {
             return;
         }
         req.summary = std::string(scan_mode_name(cfg->mode)) + " surface scan";
-        auto out = confirm_and_authorize(this, tr("Confirm Write Scan"), req, false);
+        auto out = confirm_and_authorize(this, tr("Confirm Write Scan"), req, false,
+                                         tr("%1 surface scan").arg(i18n::ct(scan_mode_name(cfg->mode))));
         if (out.cancelled) return;
         if (!out.target) {
             emit logEvent(Severity::error, tr("Write scan refused: %1").arg(out.error), target_path_);
@@ -465,7 +466,7 @@ void SurfaceTab::startScan() {
     } else {
         auto created = create_scan(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
         if (!created) {
-            const auto msg = QString::fromStdString(created.error().describe());
+            const auto msg = i18n::err(created.error());
             emit logEvent(Severity::error, tr("Cannot open device for scanning: %1").arg(msg), target_path_);
             QMessageBox::warning(this, tr("Surface Scan"),
                                  tr("Cannot open %1 for reading:\n%2%3")
@@ -478,14 +479,14 @@ void SurfaceTab::startScan() {
         scan = std::move(created).value();
     }
     if (auto v = scan->validate(); !v) {
-        const auto msg = QString::fromStdString(v.error().describe());
+        const auto msg = i18n::err(v.error());
         emit logEvent(Severity::error, tr("Invalid scan settings: %1").arg(msg), target_path_);
         QMessageBox::warning(this, tr("Surface Scan"), msg);
         return;
     }
-    for (const auto& w : scan->warnings()) emit logEvent(Severity::warning, QString::fromStdString(w), target_path_);
+    for (const auto& w : scan->warnings()) emit logEvent(Severity::warning, i18n::ct(w), target_path_);
     if (auto s = scan->start(); !s) {
-        emit logEvent(Severity::error, QString::fromStdString(s.error().describe()), target_path_);
+        emit logEvent(Severity::error, i18n::err(s.error()), target_path_);
         return;
     }
     const auto& L = scan->layout();
@@ -554,13 +555,13 @@ void SurfaceTab::finishScan() {
     const auto& s = view_->stats;
     const auto st = view_->progress.state;
     QString summary = tr("%1: %2 requests, %3 failed, %4 slow, %5 average")
-                          .arg(qs(operation_state_name(st)))
+                          .arg(i18n::ct(operation_state_name(st)))
                           .arg(s.requests)
                           .arg(s.failed)
                           .arg(s.slow)
                           .arg(rate_text(s.average_bytes_per_sec));
     if (!view_->progress.message.empty() && st != OperationState::completed)
-        summary += QStringLiteral(" (") + QString::fromStdString(view_->progress.message) + QStringLiteral(")");
+        summary += QStringLiteral(" (") + i18n::ct(view_->progress.message) + QStringLiteral(")");
     status_->setText(summary);
     const Severity sev = st == OperationState::failed || s.failed ? Severity::warning : Severity::info;
     emit logEvent(sev, tr("Surface scan finished: %1").arg(summary), target_path_);
@@ -568,7 +569,7 @@ void SurfaceTab::finishScan() {
     if (history_ && record_ && st != OperationState::cancelled) {
         if (auto id = history_->record_scan(*view_); !id)
             emit logEvent(Severity::warning,
-                          tr("Scan not saved to history: %1").arg(QString::fromStdString(id.error().describe())),
+                          tr("Scan not saved to history: %1").arg(i18n::err(id.error())),
                           target_path_);
     }
     scan_.reset();
@@ -657,7 +658,7 @@ void SurfaceTab::showSelection() {
     sel_dur_->setText(tested_bytes ? ms_text(max_us) : QStringLiteral("-"));
     sel_rate_->setText(sum_us ? rate_text(static_cast<double>(tested_bytes) * 1e6 / static_cast<double>(sum_us))
                               : QStringLiteral("-"));
-    sel_err_->setText(errors ? QStringLiteral("%1 (%2)").arg(errors).arg(qs(errc_name(static_cast<Errc>(err_code))))
+    sel_err_->setText(errors ? QStringLiteral("%1 (%2)").arg(errors).arg(i18n::ct(errc_name(static_cast<Errc>(err_code))))
                              : tr("none"));
     sel_err_->setStyleSheet(errors ? QStringLiteral("color:#C00000; font-weight:bold") : QString());
     sel_retries_->setText(QString::number(max_retries));
@@ -674,7 +675,7 @@ bool SurfaceTab::openScanFile(const QString& path) {
     }
     auto snap = reports::scan_from_json(f.readAll().toStdString());
     if (!snap) {
-        const auto msg = QString::fromStdString(snap.error().describe());
+        const auto msg = i18n::err(snap.error());
         emit logEvent(Severity::error, tr("Cannot load scan: %1").arg(msg), path);
         QMessageBox::warning(this, tr("Open Scan"), msg);
         return false;
@@ -689,7 +690,7 @@ bool SurfaceTab::openScanFile(const QString& path) {
     showSelection();
     status_->setText(tr("Viewing saved scan of %1 (%2, %3)")
                          .arg(QString::fromStdString(view_->device.model.empty() ? view_->device.path : view_->device.model),
-                              QFileInfo(path).fileName(), qs(operation_state_name(view_->progress.state))));
+                              QFileInfo(path).fileName(), i18n::ct(operation_state_name(view_->progress.state))));
     emit logEvent(Severity::info, tr("Loaded saved scan %1").arg(QFileInfo(path).fileName()),
                   QString::fromStdString(view_->device.path));
     updateButtons();

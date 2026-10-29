@@ -38,3 +38,25 @@ platter_set_warnings(platter-tests)
 
 include(Catch)
 catch_discover_tests(platter-tests)
+
+# Russian translation of the core-library phrases (needs Qt + the compiled .qm)
+if(PLATTER_BUILD_GUI AND Qt6LinguistTools_FOUND)
+    add_executable(platter-i18n-tests
+        unit/test_i18n.cpp
+        ${PROJECT_SOURCE_DIR}/src/gui/i18n/i18n.cpp
+        ${PROJECT_SOURCE_DIR}/src/gui/i18n/core_patterns.cpp
+        ${PROJECT_SOURCE_DIR}/src/gui/i18n/core_phrases.cpp)
+    target_include_directories(platter-i18n-tests PRIVATE ${PROJECT_SOURCE_DIR}/src/gui/i18n)
+    target_link_libraries(platter-i18n-tests PRIVATE Qt6::Core platter-core platter-smart Catch2::Catch2WithMain)
+    target_compile_definitions(platter-i18n-tests PRIVATE PLATTER_TEST_QM="${CMAKE_BINARY_DIR}/src/i18n/platter_ru.qm")
+    add_dependencies(platter-i18n-tests platter-translations)
+    platter_set_warnings(platter-i18n-tests)
+    catch_discover_tests(platter-i18n-tests)
+endif()
+
+# The .ts file itself: complete, placeholders intact, plural forms right.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME translations
+        COMMAND ${Python3_EXECUTABLE} -I ${PROJECT_SOURCE_DIR}/tools/check_translations.py ${PROJECT_SOURCE_DIR}/translations/platter_ru.ts)
+endif()

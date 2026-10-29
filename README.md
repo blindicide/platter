@@ -6,7 +6,7 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v1.0.0 (feature-complete, awaiting hardware validation).** Destructive operations exist and go
+> **Status: v1.1.0 (feature-complete, awaiting hardware validation).** Destructive operations exist and go
 > through a typed-confirmation safety gate, but have only ever been run against
 > image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
@@ -54,6 +54,14 @@ Win2000-style Qt Widgets interface.
 - `platter-gui` with INFO, SMART, SURFACE (Victoria-style latency map),
   BENCHMARK (HD Tune-style charts, history, run comparison), PARTITIONS and
   LOG tabs
+
+## Language
+
+The GUI is English by default. Choose Russian in **Settings > Preferences > Language** (takes effect
+after a restart) or run `platter-gui --lang ru` for one session. `platter-cli`, JSON/CSV exports and
+text reports are always English so scripts and saved reports stay stable. Translations live in
+`translations/platter_ru.ts`; see the Localization section of [HANDOFF.md](HANDOFF.md) to add or fix
+strings.
 
 ## Building
 

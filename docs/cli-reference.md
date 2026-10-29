@@ -9,6 +9,9 @@ identity re-check before the first write.
 platter-cli [options] <command> [arguments]
 ```
 
+The CLI, its JSON output and text reports are always English; the GUI language setting
+(Preferences, or `platter-gui --lang ru`) does not affect them.
+
 ## Commands
 
 | Command | What it does | Needs elevation? |

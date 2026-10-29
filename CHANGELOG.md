@@ -2,6 +2,20 @@
 
 platter follows semantic versioning from 1.0. Before 1.0 each milestone was a minor version.
 
+## 1.1.0
+
+- **Russian locale.** The GUI is English by default; pick Russian in Settings > Preferences > Language
+  (applies after a restart) or per run with `platter-gui --lang ru`. There is no system-locale
+  auto-detection. All GUI text, the confirmation dialog, help topics and the common messages produced
+  by the core libraries are translated (`translations/platter_ru.ts`).
+- The CLI, JSON/CSV exports and text reports stay English on purpose (stable, scriptable output).
+  Text report panels, the plan diff text, stored history headlines, raw OS / smartctl messages and
+  CHS notation are not translated.
+- The Russian translation has not been proofread by a native speaker.
+- Build: optional Qt LinguistTools (`qt6-tools-dev`, `qt6-l10n-tools`) compiles the `.ts` into the
+  executable; without it the GUI builds English-only. New ctest cases: `translations`, `platter-i18n-tests`.
+- Windows packaging deploys Qt's own Russian translations (`windeployqt --translations ru`).
+
 ## 1.0.0
 
 Feature-complete release candidate. **Not yet validated on physical hardware** (see

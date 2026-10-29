@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: TBD
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDialog>
 #include <QScreen>
 #include <QSettings>
 #include <QTimer>
@@ -9,6 +10,7 @@
 
 #include "mainwindow/main_window.hpp"
 #include "widgets/checksum_dialog.hpp"
+#include "widgets/confirm_dialog.hpp"
 #include "widgets/help_dialog.hpp"
 #include "widgets/history_dialog.hpp"
 #include "widgets/partition_editor.hpp"
@@ -18,6 +20,7 @@
 #include "tabs/hex_tab.hpp"
 #include "tabs/surface_tab.hpp"
 #include "platter/version.hpp"
+#include "i18n/i18n.hpp"
 #include "styles/classic_theme.hpp"
 
 int main(int argc, char** argv) {
@@ -58,14 +61,17 @@ int main(int argc, char** argv) {
     QCommandLineOption helper_opt({QStringLiteral("helper")},
                                   QStringLiteral("Open devices through the privileged helper: auto, none, or a command."),
                                   QStringLiteral("spec"));
+    QCommandLineOption lang_opt({QStringLiteral("lang")}, QStringLiteral("Interface language for this run: en or ru (default: the saved setting)."),
+                                QStringLiteral("code"));
     QCommandLineOption dialog_shot({QStringLiteral("dialog-screenshot")},
                                    QStringLiteral("Render a dialog (preferences|help|history|checksum) as NAME=FILE and exit (testing)."),
                                    QStringLiteral("name=file"));
     QCommandLineOption hex_lba({QStringLiteral("hex-lba")}, QStringLiteral("Read this LBA in the HEX tab (testing)."),
                                QStringLiteral("lba"));
-    cli.addOptions({dialog_shot, helper_opt, hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+    cli.addOptions({lang_opt, dialog_shot, helper_opt, hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
                     compare});
     cli.process(app);
+    platter::gui::i18n::install(cli.isSet(lang_opt) ? cli.value(lang_opt) : platter::gui::i18n::saved_language());
 
     if (cli.isSet(editor_shot) && !cli.positionalArguments().isEmpty()) {
         platter::gui::EditorTarget t;
@@ -88,6 +94,25 @@ int main(int argc, char** argv) {
         const auto name = spec.section(QLatin1Char('='), 0, 0);
         const auto file = spec.section(QLatin1Char('='), 1);
         std::unique_ptr<QDialog> dlg;
+        if (name == QStringLiteral("confirm") && !cli.positionalArguments().isEmpty()) {
+            // Testing aid: shows the real confirmation dialog for an erase of the given IMAGE file,
+            // grabs it and cancels. Never touches a device.
+            platter::safety::Request req;
+            req.kind = platter::safety::Kind::erase;
+            req.target.path = cli.positionalArguments().first().toStdString();
+            req.target.is_image = true;
+            req.summary = "Overwrite with zeros (1 pass), verify";
+            QTimer::singleShot(500, &w, [file] {
+                if (auto* d = QApplication::activeModalWidget()) {
+                    d->grab().save(file);
+                    if (auto* modal = qobject_cast<QDialog*>(d)) modal->reject();
+                }
+            });
+            platter::gui::confirm_and_authorize(&w, QStringLiteral("Confirm Erase"), req, false,
+                                                QCoreApplication::translate("platter::gui::EraseTab", "%1; verification: %2")
+                                                    .arg(platter::gui::i18n::ct("Zero fill (1 pass)"), platter::gui::i18n::ct("READ")));
+            return 0;
+        }
         if (name == QStringLiteral("preferences")) dlg = std::make_unique<platter::gui::PreferencesDialog>(platter::gui::Preferences::load(), &w);
         else if (name == QStringLiteral("help")) dlg = std::make_unique<platter::gui::HelpDialog>(&w);
         else if (name == QStringLiteral("checksum")) dlg = std::make_unique<platter::gui::ChecksumDialog>(&w);

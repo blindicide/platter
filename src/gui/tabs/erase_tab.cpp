@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "erase_tab.hpp"
 
 #include <QComboBox>
@@ -27,7 +28,6 @@
 namespace platter::gui {
 
 namespace {
-QString qs(std::string_view s) { return QString::fromUtf8(s.data(), static_cast<qsizetype>(s.size())); }
 }  // namespace
 
 EraseTab::EraseTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(this)) {
@@ -60,7 +60,7 @@ EraseTab::EraseTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(this)) 
     f->setLabelAlignment(Qt::AlignRight);
     method_ = new QComboBox(box);
     for (int i = 0; i < erase::kMethodCount; ++i)
-        method_->addItem(qs(erase::method_label(static_cast<erase::Method>(i))), i);
+        method_->addItem(i18n::ct(erase::method_label(static_cast<erase::Method>(i))), i);
     f->addRow(tr("Method:"), method_);
     passes_ = new QSpinBox(box);
     passes_->setRange(1, 99);
@@ -91,7 +91,7 @@ EraseTab::EraseTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(this)) 
     note->setObjectName(QStringLiteral("placeholder"));
     note->setWordWrap(true);
     f->addRow(QString(), note);
-    box->setMaximumWidth(270);
+    box->setMaximumWidth(i18n::scale(270));
 
     report_ = new QPlainTextEdit(split);
     report_->setReadOnly(true);
@@ -219,28 +219,33 @@ void EraseTab::onStart() {
     if (cfg->method == erase::Method::random_n) summary = std::to_string(cfg->random_passes) + " passes of random data";
     summary += "; verification: " + std::string(erase::verify_mode_name(cfg->verify));
     req.summary = summary;
+    const QString method_text = cfg->method == erase::Method::random_n
+                                    ? tr("%n pass(es) of random data", nullptr, static_cast<int>(cfg->random_passes))
+                                    : i18n::ct(erase::method_label(cfg->method));
+    const QString local_summary =
+        tr("%1; verification: %2").arg(method_text, i18n::ct(erase::verify_mode_name(cfg->verify)));
 
-    auto out = confirm_and_authorize(this, tr("Confirm Erase"), req, show_serial_);
+    auto out = confirm_and_authorize(this, tr("Confirm Erase"), req, show_serial_, local_summary);
     if (out.cancelled) return;
     if (!out.target) {
         emit logEvent(Severity::error, tr("Erase refused: %1").arg(out.error), target_path_);
         QMessageBox::warning(this, tr("Erase"), out.error);
         return;
     }
-    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, QString::fromStdString(w), target_path_);
+    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, i18n::ct(w), target_path_);
 
     auto op = std::make_unique<erase::Erase>(std::move(*out.target), *cfg);
     if (auto v = op->validate(); !v) {
-        const auto msg = QString::fromStdString(v.error().describe());
+        const auto msg = i18n::err(v.error());
         emit logEvent(Severity::error, tr("Invalid erase settings: %1").arg(msg), target_path_);
         QMessageBox::warning(this, tr("Erase"), msg);
         return;
     }
     if (auto s = op->start(); !s) {
-        emit logEvent(Severity::error, QString::fromStdString(s.error().describe()), target_path_);
+        emit logEvent(Severity::error, i18n::err(s.error()), target_path_);
         return;
     }
-    emit logEvent(Severity::warning, tr("Erase started: %1").arg(QString::fromStdString(summary)), target_path_);
+    emit logEvent(Severity::warning, tr("Erase started: %1").arg(local_summary), target_path_);
     op_ = std::move(op);
     last_.reset();
     report_->clear();
@@ -275,14 +280,14 @@ void EraseTab::finish() {
     last_ = op_->result();
     const reports::Privacy priv{show_serial_};
     report_->setPlainText(QString::fromStdString(reports::erase_to_text(*last_, priv)));
-    const auto verdict = qs(erase::verdict_name(last_->verdict));
+    const auto verdict = i18n::ct(erase::verdict_name(last_->verdict));
     status_->setText(verdict);
     progress_->setValue(last_->state == OperationState::completed ? 1000 : progress_->value());
     const bool ok = last_->verdict == erase::Verdict::erased_verified || last_->verdict == erase::Verdict::erased_unverified;
     emit logEvent(ok ? Severity::info : Severity::warning, tr("Erase finished: %1").arg(verdict), target_path_);
     if (history_ && record_) {
         if (auto id = history_->record_erase(*last_); !id)
-            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(QString::fromStdString(id.error().describe())),
+            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(i18n::err(id.error())),
                           target_path_);
     }
     updateButtons();

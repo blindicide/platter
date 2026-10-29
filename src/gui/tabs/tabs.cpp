@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "tabs.hpp"
 
 #include <QBoxLayout>
@@ -70,8 +71,8 @@ QVBoxLayout* compact_column(QWidget* w) {
 QString DeviceEntry::displayName() const {
     const auto cap = format_capacity(info.capacity_bytes);
     const auto short_cap = cap.substr(0, cap.find(" ("));
-    QString model = QString::fromStdString(info.model.empty() ? std::string("Unknown device") : info.model);
-    return QStringLiteral("%1  %2  [%3]").arg(QString::fromStdString(info.name), model, QString::fromStdString(short_cap));
+    QString model = info.bus == BusType::image ? i18n::ct(info.model) : QString::fromStdString(info.model);
+    return QStringLiteral("%1  %2  [%3]").arg(QString::fromStdString(info.name), model, i18n::units(QString::fromStdString(short_cap)));
 }
 
 // ======================================================================= INFO
@@ -114,7 +115,7 @@ void InfoTab::setDevice(const DeviceEntry* e, bool show_serial) {
     auto add = [&](const QString& k, const QString& v) { props_->appendRow({item(k), item(v)}); };
     add(tr("Device path"), qs(d.path));
     add(tr("Vendor"), qs(d.vendor));
-    add(tr("Model"), qs(d.model));
+    add(tr("Model"), d.bus == BusType::image ? i18n::ct(d.model) : qs(d.model));
     add(tr("Serial number"), show_serial ? qs(d.serial) : qs(reports::mask_serial(d.serial)));
     add(tr("Firmware revision"), qs(d.firmware));
     add(tr("Stable identifier"), qs(reports::redact_stable_id(d, {show_serial})));
@@ -122,11 +123,11 @@ void InfoTab::setDevice(const DeviceEntry* e, bool show_serial) {
     add(tr("Total LBAs"), QString::number(d.total_lbas()));
     add(tr("Logical sector size"), QString::number(d.logical_sector_size) + tr(" bytes"));
     add(tr("Physical sector size"), QString::number(d.physical_sector_size) + tr(" bytes"));
-    add(tr("Interface"), qs(bus_type_name(d.bus)));
-    add(tr("Media type"), qs(media_kind_name(d.media)));
-    add(tr("Removable"), qs(tri_name(d.removable)));
-    add(tr("Read-only"), qs(tri_name(d.read_only)));
-    add(tr("TRIM / discard"), qs(tri_name(d.trim_supported)));
+    add(tr("Interface"), i18n::ct(bus_type_name(d.bus)));
+    add(tr("Media type"), i18n::ct(media_kind_name(d.media)));
+    add(tr("Removable"), i18n::ct(tri_name(d.removable)));
+    add(tr("Read-only"), i18n::ct(tri_name(d.read_only)));
+    add(tr("TRIM / discard"), i18n::ct(tri_name(d.trim_supported)));
     QStringList mps;
     for (const auto& m : d.mountpoints) mps << QString::fromStdString(m);
     add(tr("Mounted at"), mps.isEmpty() ? QStringLiteral("-") : mps.join(QStringLiteral(", ")));
@@ -136,7 +137,7 @@ void InfoTab::setDevice(const DeviceEntry* e, bool show_serial) {
     add(tr("System disk"), d.is_system_disk ? tr("YES") : tr("No"));
     if (e->table) add(tr("Partition table"), qs(partitions::table_type_name(e->table->type)).toUpper());
     if (e->smart) {
-        add(tr("SMART protocol"), qs(smart::protocol_name(e->smart->protocol)));
+        add(tr("SMART protocol"), i18n::ct(smart::protocol_name(e->smart->protocol)));
         if (e->smart->rotation_rate)
             add(tr("Rotation rate"), *e->smart->rotation_rate ? QString::number(*e->smart->rotation_rate) + tr(" rpm")
                                                               : tr("Solid state"));
@@ -161,7 +162,7 @@ void InfoTab::setDevice(const DeviceEntry* e, bool show_serial) {
             source = tr("not probed (v0.4+)");
         auto* sup = item(supported);
         if (d.capabilities.has(c)) sup->setForeground(QColor(0x00, 0x60, 0x00));
-        caps_->appendRow({item(qs(capability_name(c))), sup, item(source)});
+        caps_->appendRow({item(i18n::ct(capability_name(c))), sup, item(source)});
     }
     caps_view_->resizeColumnToContents(0);
 }
@@ -240,7 +241,7 @@ void SmartTab::setDevice(const DeviceEntry* e) {
     status_->setText(tr("smartctl %1 (exit status %2), %3%4")
                          .arg(QString::fromStdString(r.smartctl_version))
                          .arg(r.smartctl_exit_status)
-                         .arg(qs(smart::protocol_name(r.protocol)))
+                         .arg(i18n::ct(smart::protocol_name(r.protocol)))
                          .arg(r.temperature_c ? tr(", %1 °C").arg(*r.temperature_c) : QString()));
 
     auto n = [](const std::optional<int>& v) {
@@ -286,10 +287,10 @@ void SmartTab::setDevice(const DeviceEntry* e) {
 
     if (e->health) {
         health_->setObjectName(health_object_name(e->health->status));
-        health_->setText(qs(smart::health_name(e->health->status)));
+        health_->setText(i18n::ct(smart::health_name(e->health->status)));
         restyle(health_);
         for (const auto& f : e->health->findings)
-            findings_->addItem(QStringLiteral("[%1] %2").arg(qs(smart::health_name(f.severity)), QString::fromStdString(f.text)));
+            findings_->addItem(QStringLiteral("[%1] %2").arg(i18n::ct(smart::health_name(f.severity)), i18n::ct(f.text)));
     }
 }
 
@@ -390,13 +391,13 @@ void PartitionsTab::setDevice(const DeviceEntry* e) {
         parts_->appendRow({num(p.number, QString::number(p.number)), num(p.first_lba, QString::number(p.first_lba)),
                            num(p.last_lba, QString::number(p.last_lba)),
                            num(p.lba_count(), QString::number(p.lba_count())),
-                           num(p.size_bytes, QString::fromStdString(cap.substr(0, cap.find(" (")))),
-                           item(QString::fromStdString(p.type_name)), item(extra),
+                           num(p.size_bytes, i18n::units(QString::fromStdString(cap.substr(0, cap.find(" ("))))),
+                           item(i18n::ct(p.type_name)), item(extra),
                            item(p.aligned_1mib ? tr("1 MiB") : tr("NO"))});
     }
     parts_view_->resizeColumnsToContents();
     if (t.warnings.empty()) warnings_->addItem(tr("No problems found."));
-    for (const auto& w : t.warnings) warnings_->addItem(QStringLiteral("! ") + QString::fromStdString(w));
+    for (const auto& w : t.warnings) warnings_->addItem(QStringLiteral("! ") + i18n::ct(w));
 }
 
 void PartitionsTab::saveState() { save_table_state(parts_view_); }

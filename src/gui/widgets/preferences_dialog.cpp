@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: TBD
 #include "preferences_dialog.hpp"
 
+#include "../i18n/i18n.hpp"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -28,6 +30,7 @@ Preferences Preferences::load() {
     p.helper_command = s.value(QStringLiteral("prefs/helper_command")).toString();
     p.log_file = s.value(QStringLiteral("prefs/log_file")).toString();
     p.history_db = s.value(QStringLiteral("prefs/history_db")).toString();
+    p.language = s.value(QStringLiteral("prefs/language"), QStringLiteral("en")).toString();
     return p;
 }
 
@@ -41,6 +44,7 @@ void Preferences::save() const {
     s.setValue(QStringLiteral("prefs/helper_command"), helper_command);
     s.setValue(QStringLiteral("prefs/log_file"), log_file);
     s.setValue(QStringLiteral("prefs/history_db"), history_db);
+    s.setValue(QStringLiteral("prefs/language"), language);
 }
 
 PreferencesDialog::PreferencesDialog(const Preferences& cur, QWidget* parent) : QDialog(parent) {
@@ -62,6 +66,14 @@ PreferencesDialog::PreferencesDialog(const Preferences& cur, QWidget* parent) : 
     helper_start_->setToolTip(tr("The privileged helper is not available on this platform"));
 #endif
     gf->addRow(helper_start_);
+    language_ = new QComboBox(general);
+    for (const auto& l : i18n::available_languages()) language_->addItem(l.native_name, l.code);
+    const int li = language_->findData(cur.language);
+    language_->setCurrentIndex(li >= 0 ? li : 0);
+    gf->addRow(tr("Language:"), language_);
+    auto* lang_note = new QLabel(tr("The language changes the next time platter starts."), general);
+    lang_note->setWordWrap(true);
+    gf->addRow(lang_note);
     auto* note = new QLabel(tr("Serial numbers are always hidden when platter starts; turn them on from Settings > Show Serial Numbers "
                                "when you need them. That choice is deliberately not remembered."), general);
     note->setWordWrap(true);
@@ -139,6 +151,7 @@ Preferences PreferencesDialog::result() const {
     p.helper_command = helper_cmd_->text().trimmed();
     p.log_file = log_file_->text().trimmed();
     p.history_db = history_db_->text().trimmed();
+    p.language = language_->currentData().toString();
     return p;
 }
 

@@ -158,6 +158,9 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/help_dialog.cpp
         gui/widgets/checksum_dialog.cpp
         gui/mainwindow/main_window.cpp
+        gui/i18n/i18n.cpp
+        gui/i18n/core_patterns.cpp
+        gui/i18n/core_phrases.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
         gui/widgets/partition_bar.hpp
@@ -174,11 +177,46 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/surface_map.hpp
         gui/widgets/chart.hpp
         gui/mainwindow/main_window.hpp
+        gui/i18n/i18n.hpp
+        gui/i18n/core_patterns.hpp
     )
     target_link_libraries(platter-gui PRIVATE
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
         platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-gui)
+
+    # ---- translations: translations/platter_<lang>.ts -> .qm embedded as :/i18n/
+    set(PLATTER_TS_FILES ${PROJECT_SOURCE_DIR}/translations/platter_ru.ts)
+    if(Qt6LinguistTools_FOUND)
+        set(PLATTER_QM_DIR ${CMAKE_CURRENT_BINARY_DIR}/i18n)
+        file(MAKE_DIRECTORY ${PLATTER_QM_DIR})
+        set(PLATTER_QM_FILES "")
+        set(PLATTER_QRC_BODY "")
+        foreach(ts ${PLATTER_TS_FILES})
+            get_filename_component(base ${ts} NAME_WE)
+            set(qm ${PLATTER_QM_DIR}/${base}.qm)
+            add_custom_command(OUTPUT ${qm}
+                COMMAND Qt6::lrelease ${ts} -qm ${qm}
+                DEPENDS ${ts}
+                COMMENT "Compiling ${base}.qm" VERBATIM)
+            list(APPEND PLATTER_QM_FILES ${qm})
+            string(APPEND PLATTER_QRC_BODY "    <file alias=\"${base}.qm\">${qm}</file>\n")
+        endforeach()
+        file(WRITE ${PLATTER_QM_DIR}/i18n.qrc "<RCC>\n  <qresource prefix=\"/i18n\">\n${PLATTER_QRC_BODY}  </qresource>\n</RCC>\n")
+        add_custom_target(platter-translations DEPENDS ${PLATTER_QM_FILES})
+        add_dependencies(platter-gui platter-translations)
+        set_target_properties(platter-gui PROPERTIES AUTORCC ON)
+        set_source_files_properties(${PLATTER_QM_FILES} PROPERTIES GENERATED TRUE)
+        target_sources(platter-gui PRIVATE ${PLATTER_QM_DIR}/i18n.qrc)
+        set_property(SOURCE ${PLATTER_QM_DIR}/i18n.qrc PROPERTY OBJECT_DEPENDS ${PLATTER_QM_FILES})
+        target_compile_definitions(platter-gui PRIVATE PLATTER_HAVE_TRANSLATIONS=1)
+        # Developer convenience: cmake --build build --target update-translations
+        file(GLOB_RECURSE PLATTER_GUI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/gui/*.hpp)
+        add_custom_target(update-translations
+            COMMAND Qt6::lupdate ${PLATTER_GUI_SOURCES} -ts ${PLATTER_TS_FILES} -no-obsolete -locations none
+            COMMENT "Updating .ts files from the GUI sources" VERBATIM)
+    endif()
+
     if(UNIX)
         target_link_libraries(platter-gui PRIVATE platter-helper-lib)
         target_compile_definitions(platter-gui PRIVATE PLATTER_HAVE_HELPER=1)

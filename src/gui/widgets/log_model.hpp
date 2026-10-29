@@ -26,6 +26,8 @@ public:
     enum Column { Time, Level, Device, Message, ColumnCount };
 
     explicit LogModel(QObject* parent = nullptr);
+    // Translated level name for display (severity_name() stays English for files).
+    static QString severity_label(Severity s);
 
     int rowCount(const QModelIndex& parent = {}) const override;
     int columnCount(const QModelIndex& parent = {}) const override;

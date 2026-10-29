@@ -22,7 +22,9 @@ struct AuthorizeOutcome {
     QString error;           // set when preview/authorize failed (not when cancelled)
 };
 
+// `localized_summary` is shown instead of request.summary (which stays English
+// for the audit record) when it is not empty.
 AuthorizeOutcome confirm_and_authorize(QWidget* parent, const QString& title, const safety::Request& request,
-                                       bool show_serial);
+                                       bool show_serial, const QString& localized_summary = {});
 
 }  // namespace platter::gui

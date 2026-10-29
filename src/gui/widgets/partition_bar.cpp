@@ -7,6 +7,7 @@
 #include <QStyleOptionFrame>
 #include <algorithm>
 
+#include "../i18n/i18n.hpp"
 #include "platter/core/device.hpp"
 
 namespace platter::gui {
@@ -27,7 +28,7 @@ QColor color_for(const partitions::Partition& p) {
 QString short_size(std::uint64_t bytes) {
     auto s = format_capacity(bytes);
     auto p = s.find(" (");
-    return QString::fromStdString(p == std::string::npos ? s : s.substr(0, p));
+    return i18n::units(QString::fromStdString(p == std::string::npos ? s : s.substr(0, p)));
 }
 
 }  // namespace
@@ -70,7 +71,7 @@ void PartitionBar::layoutSegments() {
         segments_.push_back({p->first_lba, p->last_lba, static_cast<int>(p->number),
                              QStringLiteral("#%1 %2\n%3")
                                  .arg(p->number)
-                                 .arg(QString::fromStdString(p->name.empty() ? p->type_name : p->name))
+                                 .arg((p->name.empty() ? i18n::ct(p->type_name) : QString::fromStdString(p->name)))
                                  .arg(short_size(p->size_bytes)),
                              color_for(*p), p->logical, {}});
         cursor = std::max(cursor, p->last_lba + 1);

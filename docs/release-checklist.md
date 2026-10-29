@@ -1,6 +1,6 @@
 # Release checklist
 
-platter 1.0.0 is feature-complete, but a public release should wait for the items below. Everything
+platter 1.1.0 is feature-complete, but a public release should wait for the items below. Everything
 destructive has so far been exercised only against image files, fault-injecting test doubles and
 temporary files.
 

@@ -26,7 +26,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            ninja-build qt6-base-dev nlohmann-json3-dev catch2 fdisk fonts-liberation libzstd-dev zstd
+            ninja-build qt6-base-dev qt6-tools-dev qt6-l10n-tools nlohmann-json3-dev catch2 fdisk fonts-liberation libzstd-dev zstd
 
       - name: Configure
         run: scripts/ci-run.sh "Linux configure" cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPLATTER_WERROR=ON
@@ -43,6 +43,14 @@ jobs:
           printf 'label: gpt\nsize=16MiB, name="one"\nname="two"\n' | sfdisk -q smoke.img
           ./build/src/platter-cli --version
           ./build/src/platter-cli partitions list smoke.img
+
+      - name: GUI smoke test, English and Russian (offscreen, images only)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./build/src/platter-gui smoke.img --size 1000x700 --screenshot gui-en.png
+          ./build/src/platter-gui smoke.img --lang ru --size 1000x700 --screenshot gui-ru.png
+          test -s gui-en.png && test -s gui-ru.png
           ./build/src/platter-cli partitions list --json smoke.img > partitions.json
           set +e; ./build/src/platter-cli smart show smoke.img; rc=$?; set -e
           test "$rc" -eq 7   # SMART on an image must be "unsupported"
@@ -131,13 +139,15 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           ./build/src/Release/platter-gui.exe blank.img --size 1000x700 --screenshot gui-windows.png
+          ./build/src/Release/platter-gui.exe blank.img --lang ru --size 1000x700 --screenshot gui-windows-ru.png
           test -s gui-windows.png
+          test -s gui-windows-ru.png
 
       - name: Package
         run: |
           mkdir -p dist/platter
           cp build/src/Release/platter-cli.exe build/src/Release/platter-gui.exe dist/platter/
-          windeployqt --release --no-translations --no-opengl-sw dist/platter/platter-gui.exe
+          windeployqt --release --translations ru --no-opengl-sw dist/platter/platter-gui.exe
 
       - uses: actions/upload-artifact@v4
         with:

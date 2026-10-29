@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(platter
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "Cross-platform storage diagnostics, maintenance and management utility"
     LANGUAGES C CXX)
 

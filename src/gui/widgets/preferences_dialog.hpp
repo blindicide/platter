@@ -21,6 +21,7 @@ struct Preferences {
     QString helper_command;   // empty = automatic (pkexec / sudo)
     QString log_file;         // empty = do not write one
     QString history_db;       // empty = default location (needs a restart)
+    QString language = QStringLiteral("en");   // needs a restart
 
     static Preferences load();
     void save() const;
@@ -43,6 +44,7 @@ private slots:
 private:
     QCheckBox* record_;
     QComboBox* theme_;
+    QComboBox* language_;
     QCheckBox* toolbar_;
     QCheckBox* statusbar_;
     QCheckBox* helper_start_;

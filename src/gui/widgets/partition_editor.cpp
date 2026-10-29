@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "partition_editor.hpp"
 
 #include <QCheckBox>
@@ -165,14 +166,14 @@ bool PartitionEditorDialog::reloadFromDisk() {
     if (!dev) {
         plan_.reset();
         have_disk_ = false;
-        summary_->setText(tr("Cannot open the device: %1").arg(qs(dev.error().describe())));
+        summary_->setText(tr("Cannot open the device: %1").arg(i18n::err(dev.error())));
         return false;
     }
     auto table = read_partition_table(**dev);
     if (!table) {
         plan_.reset();
         have_disk_ = false;
-        summary_->setText(tr("Cannot read the partition table: %1").arg(qs(table.error().describe())));
+        summary_->setText(tr("Cannot read the partition table: %1").arg(i18n::err(table.error())));
         return false;
     }
     on_disk_ = std::move(table).value();
@@ -184,7 +185,7 @@ bool PartitionEditorDialog::reloadFromDisk() {
         auto plan = PartitionPlan::from_device(**dev);
         if (!plan) {
             plan_.reset();
-            summary_->setText(tr("This table cannot be edited: %1").arg(qs(plan.error().describe())));
+            summary_->setText(tr("This table cannot be edited: %1").arg(i18n::err(plan.error())));
             have_disk_ = true;
             return false;
         }
@@ -244,12 +245,12 @@ void PartitionEditorDialog::refreshView() {
         auto* num = cell(QString::number(p.number));
         num->setData(p.number, Qt::UserRole);
         model_->appendRow({num, cell(QString::number(p.first_lba)), cell(QString::number(p.last_lba)),
-                           cell(qs(cap.substr(0, cap.find(" (")))), cell(qs(p.type_name)), cell(flags.join(QStringLiteral(", "))),
+                           cell(i18n::units(qs(cap.substr(0, cap.find(" ("))))), cell(i18n::ct(p.type_name)), cell(flags.join(QStringLiteral(", "))),
                            cell(p.aligned_1mib ? tr("1 MiB") : tr("NO"))});
     }
     view_->resizeColumnsToContents();
-    for (const auto& pr : plan_->problems()) problems_->addItem(QStringLiteral("ERROR: ") + qs(pr));
-    for (const auto& w : plan_->warnings()) problems_->addItem(QStringLiteral("! ") + qs(w));
+    for (const auto& pr : plan_->problems()) problems_->addItem(tr("ERROR: %1").arg(i18n::ct(pr)));
+    for (const auto& w : plan_->warnings()) problems_->addItem(QStringLiteral("! ") + i18n::ct(w));
     if (problems_->count() == 0) problems_->addItem(tr("No problems found."));
     diff_->setPlainText(dirty_ ? qs(plan_->diff(on_disk_)) : tr("No staged changes."));
     updateButtons();
@@ -274,13 +275,13 @@ void PartitionEditorDialog::onNewTable() {
 
     auto dev = open_for_read(target_);
     if (!dev) {
-        QMessageBox::warning(this, tr("New Table"), qs(dev.error().describe()));
+        QMessageBox::warning(this, tr("New Table"), i18n::err(dev.error()));
         return;
     }
     auto plan = PartitionPlan::blank(static_cast<TableType>(scheme->currentData().toInt()), (*dev)->sector_size(),
                                      (*dev)->info().total_lbas());
     if (!plan) {
-        QMessageBox::warning(this, tr("New Table"), qs(plan.error().describe()));
+        QMessageBox::warning(this, tr("New Table"), i18n::err(plan.error()));
         return;
     }
     plan_ = std::move(plan).value();
@@ -297,7 +298,7 @@ void PartitionEditorDialog::onAdd() {
     auto* type = new QComboBox(&d);
     for (const auto& a : type_aliases()) {
         if (!gpt && a.mbr_type == 0) continue;
-        type->addItem(QStringLiteral("%1 - %2").arg(QString::fromUtf8(a.name), QString::fromUtf8(a.description)),
+        type->addItem(QStringLiteral("%1 - %2").arg(QString::fromUtf8(a.name), i18n::ct(a.description)),
                       QString::fromUtf8(a.name));
     }
     const int def = type->findData(QStringLiteral("linux"));
@@ -355,7 +356,7 @@ void PartitionEditorDialog::onAdd() {
     s.name = name->text().toStdString();
     auto n = plan_->add(s);
     if (!n) {
-        QMessageBox::warning(this, tr("Add Partition"), qs(n.error().describe()));
+        QMessageBox::warning(this, tr("Add Partition"), i18n::err(n.error()));
         return;
     }
     dirty_ = true;
@@ -371,7 +372,7 @@ void PartitionEditorDialog::onDelete() {
                                   .arg(*n)) != QMessageBox::Yes)
         return;
     if (auto s = plan_->remove(*n); !s) {
-        QMessageBox::warning(this, tr("Delete Partition"), qs(s.error().describe()));
+        QMessageBox::warning(this, tr("Delete Partition"), i18n::err(s.error()));
         return;
     }
     dirty_ = true;
@@ -390,10 +391,10 @@ void PartitionEditorDialog::onProperties() {
     auto* type = new QComboBox(&d);
     for (const auto& a : type_aliases()) {
         if (!gpt && a.mbr_type == 0) continue;
-        type->addItem(QStringLiteral("%1 - %2").arg(QString::fromUtf8(a.name), QString::fromUtf8(a.description)),
+        type->addItem(QStringLiteral("%1 - %2").arg(QString::fromUtf8(a.name), i18n::ct(a.description)),
                       QString::fromUtf8(a.name));
     }
-    type->insertItem(0, tr("(unchanged: %1)").arg(qs(p->type_name)), QString());
+    type->insertItem(0, tr("(unchanged: %1)").arg(i18n::ct(p->type_name)), QString());
     type->setCurrentIndex(0);
     f->addRow(tr("Type:"), type);
     auto* name = new QLineEdit(qs(p->name), &d);
@@ -411,7 +412,7 @@ void PartitionEditorDialog::onProperties() {
     if (d.exec() != QDialog::Accepted) return;
 
     auto check = [this](const Status& s) {
-        if (!s) QMessageBox::warning(this, tr("Properties"), qs(s.error().describe()));
+        if (!s) QMessageBox::warning(this, tr("Properties"), i18n::err(s.error()));
         return static_cast<bool>(s);
     };
     if (const auto key = type->currentData().toString(); !key.isEmpty()) {
@@ -459,7 +460,7 @@ void PartitionEditorDialog::onResize() {
         return;
     }
     if (auto s = plan_->resize(*n, a, b); !s) {
-        QMessageBox::warning(this, tr("Resize"), qs(s.error().describe()));
+        QMessageBox::warning(this, tr("Resize"), i18n::err(s.error()));
         return;
     }
     dirty_ = true;
@@ -477,7 +478,7 @@ void PartitionEditorDialog::onApply() {
     if (!plan_->problems().empty()) return;
     auto ranges = plan_->metadata_ranges();
     if (!ranges) {
-        QMessageBox::warning(this, tr("Apply"), qs(ranges.error().describe()));
+        QMessageBox::warning(this, tr("Apply"), i18n::err(ranges.error()));
         return;
     }
     const auto summary = tr("Rewrite the %1 partition table:\n%2").arg(qs(table_type_name(plan_->type())).toUpper(), qs(plan_->diff(on_disk_)));
@@ -491,7 +492,7 @@ void PartitionEditorDialog::onApply() {
     }
     std::vector<std::string> notes;
     if (auto s = apply_plan(*out.target, *plan_, &notes); !s) {
-        const auto msg = qs(s.error().describe());
+        const auto msg = i18n::err(s.error());
         emit logEvent(Severity::error, tr("Writing the partition table failed: %1").arg(msg), target_.path);
         QMessageBox::critical(this, tr("Apply"), tr("Writing the partition table failed:\n%1\n\nThe table on disk may be "
                                                     "inconsistent. Re-read it before doing anything else.").arg(msg));
@@ -502,7 +503,7 @@ void PartitionEditorDialog::onApply() {
         return;
     }
     out.target.reset();  // release the exclusive lease before re-reading
-    for (const auto& n : notes) emit logEvent(Severity::warning, qs(n), target_.path);
+    for (const auto& n : notes) emit logEvent(Severity::warning, i18n::ct(n), target_.path);
     emit logEvent(Severity::warning, tr("Partition table written and verified (%1 region(s))").arg(ranges->size()), target_.path);
     emit tableWritten();
     reloadFromDisk();
@@ -527,7 +528,7 @@ void PartitionEditorDialog::onFormat() {
     f->addRow(tr("Label:"), label);
     auto* cluster = new QComboBox(&d);
     cluster->addItem(tr("Automatic"), 0);
-    for (int kb : {4, 8, 16, 32, 64, 128}) cluster->addItem(QStringLiteral("%1 KiB").arg(kb), kb * 1024);
+    for (int kb : {4, 8, 16, 32, 64, 128}) cluster->addItem(i18n::units(QStringLiteral("%1 KiB").arg(kb)), kb * 1024);
     f->addRow(tr("Cluster size:"), cluster);
     auto* note = new QLabel(tr("Quick format: only file system structures are written. Existing data stays recoverable "
                                "until overwritten - use the ERASE tab first if that matters. NTFS, ext4 and others are not "
@@ -559,11 +560,11 @@ void PartitionEditorDialog::onFormat() {
     }
     auto op = std::make_unique<mkfs::Format>(std::move(*out.target), cfg);
     if (auto v = op->validate(); !v) {
-        QMessageBox::warning(this, tr("Format"), qs(v.error().describe()));
+        QMessageBox::warning(this, tr("Format"), i18n::err(v.error()));
         return;
     }
     if (auto s = op->start(); !s) {
-        QMessageBox::warning(this, tr("Format"), qs(s.error().describe()));
+        QMessageBox::warning(this, tr("Format"), i18n::err(s.error()));
         return;
     }
     emit logEvent(Severity::warning, tr("Format started: %1").arg(summary), target_.path);
@@ -589,10 +590,10 @@ void PartitionEditorDialog::onFormat() {
     op.reset();  // releases the lease
     const bool ok = r.state == OperationState::completed;
     emit logEvent(ok ? Severity::info : Severity::error,
-                  ok ? tr("Format finished (%1)").arg(r.verified ? tr("verified") : tr("not verified")) : tr("Format %1: %2").arg(qs(operation_state_name(r.state)), qs(r.failure)),
+                  ok ? tr("Format finished (%1)").arg(r.verified ? tr("verified") : tr("not verified")) : tr("Format %1: %2").arg(i18n::ct(operation_state_name(r.state)), i18n::ct(r.failure)),
                   target_.path);
     QMessageBox box(ok ? QMessageBox::Information : QMessageBox::Warning, tr("Format"),
-                    ok ? tr("Format complete.") : tr("Format did not complete: %1").arg(qs(r.failure.empty() ? std::string(operation_state_name(r.state)) : r.failure)),
+                    ok ? tr("Format complete.") : tr("Format did not complete: %1").arg(r.failure.empty() ? i18n::ct(operation_state_name(r.state)) : i18n::ct(r.failure)),
                     QMessageBox::Ok, this);
     box.setDetailedText(qs(mkfs::format_to_text(r)));
     box.exec();

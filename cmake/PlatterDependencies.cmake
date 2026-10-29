@@ -26,6 +26,11 @@ endif()
 
 if(PLATTER_BUILD_GUI)
     find_package(Qt6 6.2 COMPONENTS Widgets QUIET)
+    # Optional: without lrelease the GUI is built English-only.
+    find_package(Qt6 6.2 COMPONENTS LinguistTools QUIET)
+    if(NOT Qt6LinguistTools_FOUND)
+        message(STATUS "Qt Linguist tools not found: building without translations (install qt6-tools-dev / qt6-l10n-tools)")
+    endif()
     if(NOT Qt6_FOUND)
         message(WARNING "Qt 6 Widgets not found: GUI will not be built")
         set(PLATTER_BUILD_GUI OFF CACHE BOOL "" FORCE)

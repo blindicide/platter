@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "qualify_tab.hpp"
 
 #include <QCheckBox>
@@ -28,7 +29,6 @@
 namespace platter::gui {
 
 namespace {
-QString qs(std::string_view s) { return QString::fromUtf8(s.data(), static_cast<qsizetype>(s.size())); }
 QString qs(const std::string& s) { return QString::fromStdString(s); }
 }  // namespace
 
@@ -97,7 +97,7 @@ QualifyTab::QualifyTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(thi
     note->setObjectName(QStringLiteral("placeholder"));
     note->setWordWrap(true);
     f->addRow(note);
-    box->setMaximumWidth(270);
+    box->setMaximumWidth(i18n::scale(270));
 
     auto* right = new QSplitter(Qt::Vertical, split);
     stages_ = new QTableWidget(0, 7, right);
@@ -198,29 +198,33 @@ void QualifyTab::onStart() {
     if (cfg.final_read) summary += ", final read";
     if (cfg.seek_samples) summary += ", " + std::to_string(cfg.seek_samples) + " random reads";
     req.summary = summary;
+    QString local_summary = tr("%n write pass(es)", nullptr, static_cast<int>(cfg.write_passes));
+    if (cfg.verify_each_pass) local_summary += tr(" with read-back");
+    if (cfg.final_read) local_summary += tr(", final read");
+    if (cfg.seek_samples) local_summary += tr(", %n random read(s)", nullptr, static_cast<int>(cfg.seek_samples));
 
-    auto out = confirm_and_authorize(this, tr("Confirm Qualification"), req, show_serial_);
+    auto out = confirm_and_authorize(this, tr("Confirm Qualification"), req, show_serial_, local_summary);
     if (out.cancelled) return;
     if (!out.target) {
         emit logEvent(Severity::error, tr("Qualification refused: %1").arg(out.error), target_path_);
         QMessageBox::warning(this, tr("Qualification"), out.error);
         return;
     }
-    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, qs(w), target_path_);
+    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, i18n::ct(w), target_path_);
 
     auto op = std::make_unique<qualify::Qualification>(std::move(*out.target), cfg);
     if (auto v = op->validate(); !v) {
-        const auto msg = qs(v.error().describe());
+        const auto msg = i18n::err(v.error());
         emit logEvent(Severity::error, tr("Invalid qualification settings: %1").arg(msg), target_path_);
         QMessageBox::warning(this, tr("Qualification"), msg);
         return;
     }
     op->set_smart_before(smart_before_);
     if (auto s = op->start(); !s) {
-        emit logEvent(Severity::error, qs(s.error().describe()), target_path_);
+        emit logEvent(Severity::error, i18n::err(s.error()), target_path_);
         return;
     }
-    emit logEvent(Severity::warning, tr("Qualification started: %1").arg(qs(summary)), target_path_);
+    emit logEvent(Severity::warning, tr("Qualification started: %1").arg(local_summary), target_path_);
     op_ = std::move(op);
     last_.reset();
     report_->clear();
@@ -243,7 +247,7 @@ void QualifyTab::refreshStages() {
     int row = 0;
     for (const auto& s : r.stages) {
         auto add = [&](int c, const QString& t) { stages_->setItem(row, c, new QTableWidgetItem(t)); };
-        add(0, qs(s.name));
+        add(0, i18n::ct(s.name));
         add(1, s.completed ? tr("yes") : (s.blocks ? tr("running") : QString()));
         if (s.kind == qualify::StageKind::seek) {
             add(2, s.blocks ? tr("p50 %1 ms").arg(static_cast<double>(s.median_us) / 1000.0, 0, 'f', 2) : QString());
@@ -308,14 +312,14 @@ void QualifyTab::finishReport() {
     last_ = op_->result();
     refreshStages();
     report_->setPlainText(qs(qualify::result_to_text(*last_, show_serial_)));
-    const auto verdict = qs(qualify::verdict_name(last_->verdict));
+    const auto verdict = i18n::ct(qualify::verdict_name(last_->verdict));
     status_->setText(verdict);
     progress_->setValue(last_->state == OperationState::completed ? 1000 : progress_->value());
     const bool ok = last_->verdict == qualify::Verdict::pass || last_->verdict == qualify::Verdict::pass_with_warnings;
     emit logEvent(ok ? Severity::info : Severity::warning, tr("Qualification finished: %1").arg(verdict), target_path_);
     if (history_ && record_) {
         if (auto id = history_->record_qualification(*last_); !id)
-            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(qs(id.error().describe())), target_path_);
+            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(i18n::err(id.error())), target_path_);
     }
     updateButtons();
 }

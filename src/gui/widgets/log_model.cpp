@@ -17,6 +17,17 @@ QString severity_name(Severity s) {
     return QStringLiteral("?");
 }
 
+QString LogModel::severity_label(Severity s) {
+    switch (s) {
+        case Severity::debug: return tr("DEBUG");
+        case Severity::info: return tr("INFO");
+        case Severity::warning: return tr("WARNING");
+        case Severity::error: return tr("ERROR");
+        case Severity::critical: return tr("CRITICAL");
+    }
+    return QStringLiteral("?");
+}
+
 LogModel::LogModel(QObject* parent) : QAbstractTableModel(parent) {}
 
 int LogModel::rowCount(const QModelIndex& parent) const {
@@ -31,7 +42,7 @@ QVariant LogModel::data(const QModelIndex& index, int role) const {
     if (role == Qt::DisplayRole || role == Qt::ToolTipRole) {
         switch (index.column()) {
             case Time: return e.time.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"));
-            case Level: return severity_name(e.severity);
+            case Level: return severity_label(e.severity);
             case Device: return e.device;
             case Message: return e.message;
         }

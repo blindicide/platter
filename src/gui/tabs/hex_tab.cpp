@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "hex_tab.hpp"
 
 #include <QCheckBox>
@@ -69,7 +70,7 @@ HexTab::HexTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(this)) {
     interpret_->addItem(tr("Interpret: none"), -2);
     for (int i = 0; i < inspect::kStructKindCount; ++i) {
         const auto k = static_cast<inspect::StructKind>(i);
-        interpret_->addItem(tr("Interpret as: %1").arg(qs(std::string(inspect::struct_kind_name(k)))), i);
+        interpret_->addItem(tr("Interpret as: %1").arg(i18n::ct(std::string(inspect::struct_kind_name(k)))), i);
     }
     where_ = new QLabel(this);
     nav->addWidget(goto_kind_);
@@ -292,12 +293,12 @@ void HexTab::loadPage(std::uint64_t lba, bool from_user) {
         oo.mode = OpenMode::read_only;
         auto dev = dev_is_image_ ? open_image(dev_path_.toStdString(), oo, sector_) : open_device(dev_path_.toStdString(), oo);
         if (!dev) {
-            read_error_ = tr("Cannot open the device for reading: %1").arg(qs(dev.error().describe()));
+            read_error_ = tr("Cannot open the device for reading: %1").arg(i18n::err(dev.error()));
         } else {
             page_.resize(static_cast<std::size_t>(want_sectors) * sector_);
             auto r = (*dev)->read(lba * sector_, page_.data(), page_.size());
             if (!r) {
-                read_error_ = tr("Read failed at LBA %1: %2").arg(lba).arg(qs(r.error().describe()));
+                read_error_ = tr("Read failed at LBA %1: %2").arg(lba).arg(i18n::err(r.error()));
                 page_.clear();
             }
         }
@@ -343,7 +344,7 @@ void HexTab::render() {
                 structure_base_ = det->offset;
             } else {
                 why = tr("Cannot interpret as %1: %2")
-                          .arg(qs(std::string(inspect::struct_kind_name(det->kind))), qs(s.error().describe()));
+                          .arg(i18n::ct(std::string(inspect::struct_kind_name(det->kind))), i18n::err(s.error()));
             }
         } else if (mode == -1) {
             why = tr("These bytes are not a structure platter recognises. Pick \"Interpret as\" to force one.");
@@ -358,15 +359,15 @@ void HexTab::render() {
             auto add = [&](int c, const QString& t) { fields_->setItem(row, c, new QTableWidgetItem(t)); };
             add(0, QString::number(abs));
             add(1, QString::number(f.size));
-            add(2, qs(f.name));
-            add(3, qs(f.value));
-            add(4, qs(f.note));
+            add(2, i18n::ct(f.name));
+            add(3, i18n::units(qs(f.value)));
+            add(4, i18n::units(i18n::ct(f.note)));
             ++row;
         }
         fields_->resizeColumnsToContents();
         QStringList lines;
-        lines << qs(structure_->title);
-        for (const auto& n : structure_->notes) lines << QStringLiteral("• ") + qs(n);
+        lines << i18n::ct(structure_->title);
+        for (const auto& n : structure_->notes) lines << QStringLiteral("• ") + i18n::ct(n);
         notes_->setPlainText(lines.join(QLatin1Char('\n')));
     } else {
         notes_->setPlainText(why);
@@ -441,7 +442,7 @@ std::optional<inspect::Pattern> HexTab::buildPattern(QString& error) const {
         case 0: {
             auto p = inspect::parse_hex_pattern(text.toStdString());
             if (!p) {
-                error = qs(p.error().describe());
+                error = i18n::err(p.error());
                 return std::nullopt;
             }
             return std::move(p).value();
@@ -451,7 +452,7 @@ std::optional<inspect::Pattern> HexTab::buildPattern(QString& error) const {
         default: {
             auto p = inspect::utf16le_pattern(text.toUtf8().toStdString(), ci);
             if (!p) {
-                error = qs(p.error().describe());
+                error = i18n::err(p.error());
                 return std::nullopt;
             }
             return std::move(p).value();
@@ -531,7 +532,7 @@ void HexTab::finishSearch() {
     if (job->worker.joinable()) job->worker.join();
     progress_->setValue(0);
     if (!job->error.empty()) {
-        status_->setText(tr("Search failed: %1").arg(qs(job->error)));
+        status_->setText(tr("Search failed: %1").arg(i18n::ct(job->error)));
         emit logEvent(Severity::warning, status_->text(), dev_path_);
         updateButtons();
         return;

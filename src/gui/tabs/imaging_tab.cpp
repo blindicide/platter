@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: TBD
+#include "../i18n/i18n.hpp"
 #include "imaging_tab.hpp"
 
 #include <QCheckBox>
@@ -128,7 +129,7 @@ ImagingTab::ImagingTab(QWidget* parent) : QWidget(parent), timer_(new QTimer(thi
     note->setObjectName(QStringLiteral("placeholder"));
     note->setWordWrap(true);
     f->addRow(QString(), note);
-    box->setMaximumWidth(360);
+    box->setMaximumWidth(i18n::scale(360));
 
     report_ = new QPlainTextEdit(split);
     report_->setReadOnly(true);
@@ -295,7 +296,7 @@ void ImagingTab::onStart() {
 
 void ImagingTab::begin(std::unique_ptr<Operation> op, std::function<imaging::ImagingResult()> result, const QString& what) {
     if (auto s = op->start(); !s) {
-        const auto msg = qs(s.error().describe());
+        const auto msg = i18n::err(s.error());
         emit logEvent(Severity::error, tr("%1 could not start: %2").arg(what, msg), dev_path_);
         warn(msg);
         return;
@@ -332,12 +333,12 @@ bool ImagingTab::startCreate() {
     if (!ok) return false;
     auto dev = openReadOnly(dev_path_, dev_is_image_, dev_sector_);
     if (!dev) {
-        warn(tr("Cannot open the device for reading: %1").arg(qs(dev.error().describe())));
+        warn(tr("Cannot open the device for reading: %1").arg(i18n::err(dev.error())));
         return false;
     }
     auto op = std::make_unique<imaging::CreateImage>(std::move(*dev), c);
     if (auto v = op->validate(); !v) {
-        warn(qs(v.error().describe()));
+        warn(i18n::err(v.error()));
         return false;
     }
     const auto* raw = op.get();
@@ -361,7 +362,7 @@ bool ImagingTab::startRestore() {
     if (!ok) return false;
     auto sectors = imaging::RestoreImage::sectors_needed(c.input, dev_sector_);
     if (!sectors) {
-        warn(qs(sectors.error().describe()));
+        warn(i18n::err(sectors.error()));
         return false;
     }
     safety::Request req;
@@ -378,10 +379,10 @@ bool ImagingTab::startRestore() {
         warn(out.error);
         return false;
     }
-    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, qs(w), dev_path_);
+    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, i18n::ct(w), dev_path_);
     auto op = std::make_unique<imaging::RestoreImage>(std::move(*out.target), c);
     if (auto v = op->validate(); !v) {
-        warn(qs(v.error().describe()));
+        warn(i18n::err(v.error()));
         return false;
     }
     const auto* raw = op.get();
@@ -425,7 +426,7 @@ bool ImagingTab::startClone() {
     const std::uint64_t sectors = end - c.source_first_lba + 1;
     auto src = openReadOnly(dev_path_, dev_is_image_, dev_sector_);
     if (!src) {
-        warn(tr("Cannot open the source for reading: %1").arg(qs(src.error().describe())));
+        warn(tr("Cannot open the source for reading: %1").arg(i18n::err(src.error())));
         return false;
     }
     safety::Request req;
@@ -442,10 +443,10 @@ bool ImagingTab::startClone() {
         warn(out.error);
         return false;
     }
-    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, qs(w), other->path);
+    for (const auto& w : out.target->warnings()) emit logEvent(Severity::warning, i18n::ct(w), other->path);
     auto op = std::make_unique<imaging::CloneDevice>(std::move(*src), std::move(*out.target), c);
     if (auto v = op->validate(); !v) {
-        warn(qs(v.error().describe()));
+        warn(i18n::err(v.error()));
         return false;
     }
     const auto* raw = op.get();
@@ -467,7 +468,7 @@ bool ImagingTab::startVerify() {
     if (compare_->isChecked()) {
         auto dev = openReadOnly(dev_path_, dev_is_image_, dev_sector_);
         if (!dev) {
-            warn(tr("Cannot open the device for reading: %1").arg(qs(dev.error().describe())));
+            warn(tr("Cannot open the device for reading: %1").arg(i18n::err(dev.error())));
             return false;
         }
         c.compare_to = std::move(*dev);
@@ -476,7 +477,7 @@ bool ImagingTab::startVerify() {
     }
     auto op = std::make_unique<imaging::VerifyImage>(std::move(c));
     if (auto v = op->validate(); !v) {
-        warn(qs(v.error().describe()));
+        warn(i18n::err(v.error()));
         return false;
     }
     const auto* raw = op.get();
@@ -498,7 +499,7 @@ void ImagingTab::poll() {
                          .arg(p.percent(), 0, 'f', 1)
                          .arg(p.current_bytes_per_sec / 1e6, 0, 'f', 1)
                          .arg(p.errors)
-                         .arg(qs(p.message)));
+                         .arg(i18n::ct(p.message)));
     if (is_terminal(p.state)) finish();
 }
 
@@ -507,14 +508,14 @@ void ImagingTab::finish() {
     op_->wait();
     last_ = result_fn_();
     report_->setPlainText(qs(imaging::result_to_text(*last_, show_serial_)));
-    status_->setText(qs(std::string(imaging::verdict_name(last_->verdict))));
+    status_->setText(i18n::ct(std::string(imaging::verdict_name(last_->verdict))));
     if (last_->state == OperationState::completed) progress_->setValue(1000);
     const bool good = last_->verdict == imaging::Verdict::ok;
     emit logEvent(good ? Severity::info : Severity::warning,
-                  tr("%1 finished: %2").arg(running_what_, qs(std::string(imaging::verdict_name(last_->verdict)))), dev_path_);
+                  tr("%1 finished: %2").arg(running_what_, i18n::ct(std::string(imaging::verdict_name(last_->verdict)))), dev_path_);
     if (history_ && record_) {
         if (auto id = history_->record_imaging(*last_); !id)
-            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(qs(id.error().describe())), dev_path_);
+            emit logEvent(Severity::warning, tr("Could not save to history: %1").arg(i18n::err(id.error())), dev_path_);
     }
     op_.reset();  // releases a write lease right away
     result_fn_ = nullptr;

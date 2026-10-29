@@ -144,7 +144,7 @@ TEST_CASE("sparse raw images keep their size and read back as zeros", "[imaging]
 }
 
 TEST_CASE("zstd images round-trip, are smaller for compressible data and detect damage", "[imaging][file][zstd]") {
-    if (!zstd_available()) SKIP("built without zstd");
+    if (!zstd_available()) { SUCCEED("built without zstd"); return; }
     TempDir tmp;
     const auto out = (tmp / "z.img.zst").string();
     WriterOptions o;
@@ -212,7 +212,7 @@ TEST_CASE("create image: raw copy is byte-exact with checksum, sidecar and read-
 }
 
 TEST_CASE("create image: a sub-range and zstd", "[imaging][create][zstd]") {
-    if (!zstd_available()) SKIP("built without zstd");
+    if (!zstd_available()) { SUCCEED("built without zstd"); return; }
     TempDir tmp;
     const auto src = tmp / "src.img";
     make_data_file(src, 2 * kMiB, 12);

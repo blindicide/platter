@@ -2,7 +2,11 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QFile>
 #include <memory>
+
+#include "../widgets/log_model.hpp"
+#include "../widgets/preferences_dialog.hpp"
 #include <vector>
 
 #include "device_entry.hpp"
@@ -17,6 +21,8 @@ class QAction;
 namespace platter::storage {
 class HistoryStore;
 }
+
+class QToolBar;
 
 namespace platter::gui {
 
@@ -65,6 +71,8 @@ private slots:
     void readPartitions();
     void editPartitions();
     void showHistory();
+    void showPreferences();
+    void showHelp();
     void openImageDialog();
     void saveReport();
     void about();
@@ -135,6 +143,11 @@ private:
     QAction* act_show_serials_ = nullptr;
     QAction* act_about_ = nullptr;
     QAction* act_helper_ = nullptr;
+    QToolBar* toolbar_ = nullptr;
+    Preferences prefs_;
+    std::unique_ptr<QFile> log_file_;
+    void applyPreferences(const Preferences& p, bool startup);
+    void writeLogLine(const LogEvent& e);
     bool helper_on_ = false;
     QAction* act_license_ = nullptr;
 

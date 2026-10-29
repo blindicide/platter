@@ -36,12 +36,26 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.8 Privilege separation (Linux helper) — feature-complete in code, never run on real hardware**
-(see "v0.8 so far"). Previously: **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.9 Preferences / help / polish — complete in code, GUI only exercised offscreen**
+(see "v0.9 so far"). Previously: **v0.8 Privilege separation (Linux helper)**, **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.9 so far
+- **Preferences** (`src/gui/widgets/preferences_dialog.*`, Settings > Preferences; `Preferences` struct
+  loads/saves QSettings keys `prefs/*` + existing `history/record`): history on/off, theme
+  (classic Win2000 vs platform default; live switch via `apply_theme`, `remember_system_theme()` is
+  called in `gui/main.cpp` before the classic theme), toolbar/status bar visibility, privileged helper
+  at startup (+ custom command), append-to-file activity log, history DB path override ($PLATTER_HISTORY_DB
+  still wins; applies on restart), Reset All Settings. The six "planned" Settings placeholders were
+  replaced by this one dialog (no fake pages). Serial numbers are intentionally NOT persisted.
+- **Help** (`help_dialog.*`, Help > Documentation, F1): offline topic browser; the HTML is embedded in
+  the .cpp. Keep it in sync with docs/ when features change.
+- `platter-gui --dialog-screenshot preferences|help|history|checksum=FILE` renders a dialog offscreen
+  (used by CI as a smoke test; the history dialog needs a readable history DB).
+- Not done: per-device settings, translations (strings use tr() but no .ts files), high-DPI tuning.
 
 ### v0.8 so far
 - **Privilege separation** (POSIX only; see docs/privilege-separation.md): `platter-helper`
@@ -449,7 +463,7 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. (v0.8 done) v0.9 settings and polish, v1.0 release prep (see sections below
+2. (v0.9 done) v1.0 release prep (see sections below
    as they get filled in).
 
 ## 3. Layout

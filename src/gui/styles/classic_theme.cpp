@@ -5,9 +5,36 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QPalette>
+#include <QStyle>
 #include <QStyleFactory>
 
 namespace platter::gui {
+
+namespace {
+QString g_system_style;
+QPalette g_system_palette;
+QFont g_system_font;
+bool g_remembered = false;
+}  // namespace
+
+void remember_system_theme(QApplication& app) {
+    g_system_style = app.style() ? app.style()->objectName() : QString();
+    g_system_palette = app.palette();
+    g_system_font = app.font();
+    g_remembered = true;
+}
+
+void apply_theme(QApplication& app, bool classic) {
+    if (classic) {
+        apply_classic_theme(app);
+        return;
+    }
+    if (!g_remembered) return;
+    if (!g_system_style.isEmpty())
+        if (auto* style = QStyleFactory::create(g_system_style)) app.setStyle(style);
+    app.setPalette(g_system_palette);
+    app.setFont(g_system_font);
+}
 
 void apply_classic_theme(QApplication& app) {
     if (auto* style = QStyleFactory::create(QStringLiteral("Windows"))) app.setStyle(style);

@@ -2,11 +2,18 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QScreen>
+#include <QSettings>
 #include <QTimer>
 #include <algorithm>
+#include <memory>
 
 #include "mainwindow/main_window.hpp"
+#include "widgets/checksum_dialog.hpp"
+#include "widgets/help_dialog.hpp"
+#include "widgets/history_dialog.hpp"
 #include "widgets/partition_editor.hpp"
+#include "widgets/preferences_dialog.hpp"
+#include "platter/storage/history.hpp"
 #include "tabs/benchmark_tab.hpp"
 #include "tabs/hex_tab.hpp"
 #include "tabs/surface_tab.hpp"
@@ -18,7 +25,8 @@ int main(int argc, char** argv) {
     QApplication::setOrganizationName(QStringLiteral("platter"));
     QApplication::setApplicationName(QStringLiteral("platter"));
     QApplication::setApplicationVersion(QString::fromLatin1(platter::kVersion));
-    platter::gui::apply_classic_theme(app);
+    platter::gui::remember_system_theme(app);
+    platter::gui::apply_theme(app, QSettings().value(QStringLiteral("prefs/theme"), QStringLiteral("classic")).toString() != QStringLiteral("system"));
 
     QCommandLineParser cli;
     cli.setApplicationDescription(QStringLiteral("platter storage operations suite (GUI)"));
@@ -50,9 +58,12 @@ int main(int argc, char** argv) {
     QCommandLineOption helper_opt({QStringLiteral("helper")},
                                   QStringLiteral("Open devices through the privileged helper: auto, none, or a command."),
                                   QStringLiteral("spec"));
+    QCommandLineOption dialog_shot({QStringLiteral("dialog-screenshot")},
+                                   QStringLiteral("Render a dialog (preferences|help|history|checksum) as NAME=FILE and exit (testing)."),
+                                   QStringLiteral("name=file"));
     QCommandLineOption hex_lba({QStringLiteral("hex-lba")}, QStringLiteral("Read this LBA in the HEX tab (testing)."),
                                QStringLiteral("lba"));
-    cli.addOptions({helper_opt, hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+    cli.addOptions({dialog_shot, helper_opt, hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
                     compare});
     cli.process(app);
 
@@ -72,6 +83,32 @@ int main(int argc, char** argv) {
     }
 
     platter::gui::MainWindow w;
+    if (cli.isSet(dialog_shot)) {
+        const auto spec = cli.value(dialog_shot);
+        const auto name = spec.section(QLatin1Char('='), 0, 0);
+        const auto file = spec.section(QLatin1Char('='), 1);
+        std::unique_ptr<QDialog> dlg;
+        if (name == QStringLiteral("preferences")) dlg = std::make_unique<platter::gui::PreferencesDialog>(platter::gui::Preferences::load(), &w);
+        else if (name == QStringLiteral("help")) dlg = std::make_unique<platter::gui::HelpDialog>(&w);
+        else if (name == QStringLiteral("checksum")) dlg = std::make_unique<platter::gui::ChecksumDialog>(&w);
+        else if (name == QStringLiteral("history")) {
+            auto store = platter::storage::HistoryStore::open(platter::storage::HistoryStore::default_path());
+            if (!store) return 3;
+            dlg = std::make_unique<platter::gui::HistoryDialog>(store->get(), QString(), false, &w);
+            dlg->show();
+            QTimer::singleShot(300, dlg.get(), [&dlg, file] {
+                dlg->grab().save(file);
+                QApplication::quit();
+            });
+            return QApplication::exec();
+        } else return 2;
+        dlg->show();
+        QTimer::singleShot(300, dlg.get(), [&dlg, file] {
+            dlg->grab().save(file);
+            QApplication::quit();
+        });
+        return QApplication::exec();
+    }
     const auto ss = cli.value(sector).toUInt() == 4096 ? 4096u : 512u;
     for (const auto& img : cli.positionalArguments()) w.openImage(img, ss);
     if (cli.isSet(helper_opt)) w.useHelper(cli.value(helper_opt));

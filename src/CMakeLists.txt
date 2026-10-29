@@ -154,12 +154,16 @@ if(PLATTER_BUILD_GUI)
         gui/widgets/confirm_dialog.cpp
         gui/widgets/partition_editor.cpp
         gui/widgets/history_dialog.cpp
+        gui/widgets/preferences_dialog.cpp
+        gui/widgets/help_dialog.cpp
         gui/widgets/checksum_dialog.cpp
         gui/mainwindow/main_window.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
         gui/widgets/partition_bar.hpp
         gui/widgets/history_dialog.hpp
+        gui/widgets/preferences_dialog.hpp
+        gui/widgets/help_dialog.hpp
         gui/widgets/checksum_dialog.hpp
         gui/tabs/tabs.hpp
         gui/tabs/surface_tab.hpp

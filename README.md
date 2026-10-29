@@ -6,7 +6,7 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.8 (privilege separation).** Destructive operations exist and go
+> **Status: v0.9 (preferences and polish).** Destructive operations exist and go
 > through a typed-confirmation safety gate, but have only ever been run against
 > image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.

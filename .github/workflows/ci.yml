@@ -79,6 +79,10 @@ jobs:
           test -s gui-linux.png
           ./build/src/platter-gui smoke.img --tab HEX --size 1000x700 --screenshot gui-hex.png
           test -s gui-hex.png
+          for d in preferences help history checksum; do
+            ./build/src/platter-gui --dialog-screenshot "$d=dlg-$d.png"
+            test -s "dlg-$d.png"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

@@ -33,7 +33,9 @@
 #include "../tabs/erase_tab.hpp"
 #include "../tabs/hex_tab.hpp"
 #include "../widgets/checksum_dialog.hpp"
+#include "../widgets/help_dialog.hpp"
 #include "../widgets/history_dialog.hpp"
+#include "../styles/classic_theme.hpp"
 #include "../tabs/qualify_tab.hpp"
 #include "../tabs/surface_tab.hpp"
 #include "../tabs/tabs.hpp"
@@ -90,7 +92,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), log_(new LogModel
 
     log_->add(Severity::info, tr("platter %1 started (%2 privileges; destructive operations ask for typed confirmation)")
                                   .arg(QString::fromLatin1(kVersion), qs(privilege_label())));
+    prefs_ = Preferences::load();
     openHistory();
+    applyPreferences(prefs_, /*startup=*/true);
     refreshDevices();
 }
 
@@ -295,12 +299,21 @@ void MainWindow::buildMenus() {
     settings->addAction(act_show_serials_);
     settings->addAction(act_record_);
     settings->addSeparator();
-    for (const auto& name : {tr("&General..."), tr("&Interface..."), tr("&Performance..."), tr("I/&O..."),
-                             tr("&Logging..."), tr("&Advanced...")})
-        settings->addAction(planned(name, QStringLiteral("v0.9")));
+    {
+        auto* prefs = new QAction(tr("&Preferences..."), this);
+        prefs->setStatusTip(tr("History, look, privileged helper, log file"));
+        connect(prefs, &QAction::triggered, this, &MainWindow::showPreferences);
+        settings->addAction(prefs);
+    }
 
     auto* help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(planned(tr("&Documentation"), QStringLiteral("v0.9")));
+    {
+        auto* doc = new QAction(tr("&Documentation"), this);
+        doc->setShortcut(QKeySequence(QStringLiteral("F1")));
+        doc->setStatusTip(tr("Built-in help (works offline)"));
+        connect(doc, &QAction::triggered, this, &MainWindow::showHelp);
+        help->addAction(doc);
+    }
     help->addSeparator();
     help->addAction(act_about_);
     help->addAction(act_license_);
@@ -308,6 +321,7 @@ void MainWindow::buildMenus() {
 
 void MainWindow::buildToolBar() {
     auto* tb = addToolBar(tr("Main"));
+    toolbar_ = tb;
     tb->setObjectName(QStringLiteral("mainToolBar"));
     tb->setIconSize(QSize(16, 16));
     tb->setMovable(false);
@@ -452,7 +466,9 @@ void MainWindow::buildStatusBar() {
 
 void MainWindow::openHistory() {
     // Same database as platter-cli, so sessions saved by either appear in both.
-    const auto path = storage::HistoryStore::default_path();
+    // $PLATTER_HISTORY_DB wins; otherwise the Preferences override; otherwise the default.
+    const auto path = (!prefs_.history_db.isEmpty() && !std::getenv("PLATTER_HISTORY_DB")) ? prefs_.history_db.toStdString()
+                                                                                          : storage::HistoryStore::default_path();
     auto store = storage::HistoryStore::open(path);
     if (!store) {
         log_->add(Severity::warning,
@@ -792,6 +808,58 @@ void MainWindow::readPartitions() {
             },
             Qt::QueuedConnection);
     });
+}
+
+void MainWindow::showPreferences() {
+    PreferencesDialog dlg(Preferences::load(), this);
+    connect(&dlg, &PreferencesDialog::applied, this, [this](const Preferences& p) { applyPreferences(p, false); });
+    if (dlg.exec() == QDialog::Accepted) applyPreferences(dlg.result(), false);
+}
+
+void MainWindow::showHelp() {
+    HelpDialog dlg(this);
+    dlg.exec();
+}
+
+void MainWindow::writeLogLine(const LogEvent& e) {
+    if (!log_file_ || !log_file_->isOpen()) return;
+    const auto line = QStringLiteral("%1\t%2\t%3\t%4\n")
+                          .arg(e.time.toString(Qt::ISODate), severity_name(e.severity), e.device, QString(e.message).replace(QLatin1Char('\n'), QLatin1Char(' ')))
+                          .toUtf8();
+    log_file_->write(line);
+    log_file_->flush();
+}
+
+void MainWindow::applyPreferences(const Preferences& p, bool startup) {
+    const Preferences old = prefs_;
+    prefs_ = p;
+    p.save();
+
+    if (startup || p.record_history != old.record_history) act_record_->setChecked(p.record_history);
+    if (startup || p.classic_theme != old.classic_theme) platter::gui::apply_theme(*qApp, p.classic_theme);
+    if (toolbar_) toolbar_->setVisible(p.show_toolbar);
+    statusBar()->setVisible(p.show_statusbar);
+
+    if (startup || p.log_file != old.log_file) {
+        if (log_file_) disconnect(log_, &LogModel::eventAdded, this, nullptr);
+        log_file_.reset();
+        if (!p.log_file.isEmpty()) {
+            auto f = std::make_unique<QFile>(p.log_file);
+            if (f->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+                log_file_ = std::move(f);
+                connect(log_, &LogModel::eventAdded, this, [this](const LogEvent& e) { writeLogLine(e); });
+                log_->add(Severity::info, tr("Logging to %1").arg(p.log_file));
+            } else {
+                log_->add(Severity::warning, tr("Cannot open the log file %1: %2").arg(p.log_file, f->errorString()));
+            }
+        }
+    }
+    if (!startup && p.history_db != old.history_db)
+        log_->add(Severity::info, tr("The history database location changes after restarting platter"));
+    if (startup && p.helper_at_startup && !running_elevated()) {
+        const auto spec = p.helper_command.isEmpty() ? QStringLiteral("auto") : p.helper_command;
+        useHelper(spec);
+    }
 }
 
 bool MainWindow::useHelper(const QString& spec) {

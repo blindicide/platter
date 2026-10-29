@@ -7,6 +7,9 @@ add_library(platter-core STATIC
     core/operation.cpp
     core/histogram.cpp
     core/sha256.cpp
+    core/chacha20.cpp
+    core/time_util.cpp
+    core/safety.cpp
     platform/image/image_info.cpp
     platform/privileges.cpp
 )
@@ -61,10 +64,17 @@ add_library(platter-benchmark STATIC benchmark/benchmark.cpp)
 target_link_libraries(platter-benchmark PUBLIC platter-core)
 platter_set_warnings(platter-benchmark)
 
+# --------------------------------------------------------------- platter-erase
+add_library(platter-erase STATIC erase/erase.cpp)
+target_link_libraries(platter-erase PUBLIC platter-core)
+platter_set_warnings(platter-erase)
+
 # ------------------------------------------------------------- platter-reports
-add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp reports/bench_report.cpp)
+add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp reports/bench_report.cpp
+    reports/erase_report.cpp)
 target_link_libraries(platter-reports
-    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark nlohmann_json::nlohmann_json)
+    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase
+           nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
 # ------------------------------------------------------------- platter-storage
@@ -74,9 +84,9 @@ platter_set_warnings(platter-storage)
 
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
-    add_executable(platter-cli cli/main.cpp)
+    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
-        platter-benchmark platter-reports platter-storage)
+        platter-benchmark platter-erase platter-reports platter-storage)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()
@@ -93,8 +103,10 @@ if(PLATTER_BUILD_GUI)
         gui/tabs/tabs.cpp
         gui/tabs/surface_tab.cpp
         gui/tabs/benchmark_tab.cpp
+        gui/tabs/erase_tab.cpp
         gui/widgets/surface_map.cpp
         gui/widgets/chart.cpp
+        gui/widgets/confirm_dialog.cpp
         gui/mainwindow/main_window.cpp
         # headers listed so AUTOMOC sees the Q_OBJECT classes
         gui/widgets/log_model.hpp
@@ -102,13 +114,14 @@ if(PLATTER_BUILD_GUI)
         gui/tabs/tabs.hpp
         gui/tabs/surface_tab.hpp
         gui/tabs/benchmark_tab.hpp
+        gui/tabs/erase_tab.hpp
         gui/widgets/surface_map.hpp
         gui/widgets/chart.hpp
         gui/mainwindow/main_window.hpp
     )
     target_link_libraries(platter-gui PRIVATE
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
-        platter-reports platter-storage)
+        platter-erase platter-reports platter-storage)
     platter_set_warnings(platter-gui)
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

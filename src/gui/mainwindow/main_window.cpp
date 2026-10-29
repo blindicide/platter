@@ -26,6 +26,7 @@
 #include <QToolBar>
 
 #include "../tabs/benchmark_tab.hpp"
+#include "../tabs/erase_tab.hpp"
 #include "../tabs/surface_tab.hpp"
 #include "../tabs/tabs.hpp"
 #include "../widgets/log_model.hpp"
@@ -76,7 +77,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), log_(new LogModel
     buildStatusBar();
     restoreSettings();
 
-    log_->add(Severity::info, tr("platter %1 started (%2 privileges, read-only mode)")
+    log_->add(Severity::info, tr("platter %1 started (%2 privileges; destructive operations ask for typed confirmation)")
                                   .arg(QString::fromLatin1(kVersion), qs(privilege_label())));
     openHistory();
     refreshDevices();
@@ -86,6 +87,7 @@ MainWindow::~MainWindow() {
     // Tabs may still reference the store while stopping their workers.
     if (surface_tab_) surface_tab_->stopAndWait();
     if (bench_tab_) bench_tab_->stopAndWait();
+    if (erase_tab_) erase_tab_->stopAndWait();
     for (auto& t : workers())
         if (t) t->wait();
 }
@@ -161,6 +163,7 @@ void MainWindow::buildActions() {
         QSettings().setValue(QStringLiteral("history/record"), on);
         if (bench_tab_) bench_tab_->setHistory(history_.get(), on);
         if (surface_tab_) surface_tab_->setHistory(history_.get(), on);
+        if (erase_tab_) erase_tab_->setHistory(history_.get(), on);
     });
 
     act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
@@ -168,6 +171,7 @@ void MainWindow::buildActions() {
     act_show_serials_->setStatusTip(tr("Serial numbers are masked on screen and omitted from reports by default"));
     connect(act_show_serials_, &QAction::toggled, this, [this](bool on) {
         show_serials_ = on;
+        if (erase_tab_) erase_tab_->setShowSerials(on);
         showCurrent();
     });
 
@@ -199,7 +203,12 @@ void MainWindow::buildMenus() {
     ops->addAction(act_benchmark_);
     ops->addAction(planned(tr("&Partition Manager..."), QStringLiteral("v0.5")));
     ops->addSeparator();
-    ops->addAction(planned(tr("&Erase Device..."), QStringLiteral("v0.4")));
+    {
+        auto* a = new QAction(tr("&Erase Device..."), this);
+        a->setStatusTip(tr("Overwrite erase with verification (asks for typed confirmation)"));
+        connect(a, &QAction::triggered, this, [this] { selectTab(QStringLiteral("ERASE")); });
+        ops->addAction(a);
+    }
     ops->addAction(planned(tr("&Clone Device..."), QStringLiteral("v0.6")));
     ops->addAction(planned(tr("Create Disk &Image..."), QStringLiteral("v0.6")));
 
@@ -306,11 +315,10 @@ void MainWindow::buildCentral() {
     connect(bench_tab_, &BenchmarkTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(part_tab_, tr("PARTITIONS"));
-    tabs_->addTab(new PlannedTab(tr("Erase"), QStringLiteral("v0.4"),
-                                 tr("Zero / pattern / random overwrite with verification, ATA Secure Erase and "
-                                    "NVMe Sanitize, behind typed confirmation and identity revalidation."),
-                                 tabs_),
-                  tr("ERASE"));
+    erase_tab_ = new EraseTab(tabs_);
+    tabs_->addTab(erase_tab_, tr("ERASE"));
+    connect(erase_tab_, &EraseTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(new PlannedTab(tr("Clone / Image"), QStringLiteral("v0.6"),
                                  tr("Raw and zstd-compressed imaging, restore, disk-to-disk clone and "
                                     "damaged-media recovery copy with an error map."),
@@ -355,8 +363,8 @@ void MainWindow::buildStatusBar() {
         return l;
     };
     st_device_ = mk(tr("No device"));
-    st_mode_ = mk(tr("READ-ONLY"));
-    st_mode_->setToolTip(tr("v0.1 never opens a device for writing"));
+    st_mode_ = mk(tr("CONFIRM TO WRITE"));
+    st_mode_->setToolTip(tr("Nothing is written to a device without a preview and a typed confirmation"));
     st_priv_ = mk(tr("Privileges: %1").arg(qs(privilege_label())));
     st_priv_->setToolTip(running_elevated() ? tr("Running elevated")
                                             : tr("Reading sectors and SMART data from physical disks usually "
@@ -383,6 +391,7 @@ void MainWindow::openHistory() {
     act_record_->setEnabled(history_ != nullptr);
     bench_tab_->setHistory(history_.get(), record_history_);
     surface_tab_->setHistory(history_.get(), record_history_);
+    erase_tab_->setHistory(history_.get(), record_history_);
 }
 
 void MainWindow::restoreSettings() {
@@ -395,9 +404,9 @@ void MainWindow::restoreSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (surface_tab_->isRunning() || bench_tab_->isRunning()) {
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning()) {
         const auto answer = QMessageBox::question(this, tr("Operation Running"),
-                                                  tr("A surface scan or benchmark is still running. Stop it and exit?"),
+                                                  tr("A scan, benchmark or erase is still running. Stop it and exit?"),
                                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (answer != QMessageBox::Yes) {
             e->ignore();
@@ -405,6 +414,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
         }
         surface_tab_->stopAndWait();
         bench_tab_->stopAndWait();
+        erase_tab_->stopAndWait();
     }
     QSettings s;
     s.setValue(QStringLiteral("window/geometry"), saveGeometry());
@@ -526,6 +536,7 @@ void MainWindow::showCurrent() {
     part_tab_->setBusy(busy_parts_);
     surface_tab_->setDevice(e);
     bench_tab_->setDevice(e);
+    erase_tab_->setDevice(e);
     updateSummary();
     const bool has = e != nullptr;
     act_save_report_->setEnabled(has);

@@ -30,6 +30,9 @@ enum class Errc : std::uint16_t {
     corrupt_data,
     external_tool_failed,
     internal,
+    // A safety check (docs/safety.md) refused a destructive request: wrong
+    // confirmation, device in use, identity changed, ...
+    refused,
 };
 
 std::string_view errc_name(Errc e) noexcept;

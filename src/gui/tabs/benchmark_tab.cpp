@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: TBD
 #include "benchmark_tab.hpp"
+#include "../widgets/confirm_dialog.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -133,10 +134,6 @@ QWidget* BenchmarkTab::buildSettings() {
 
     kind_ = new QComboBox(box);
     for (int k = 0; k < kBenchKindCount; ++k) kind_->addItem(qs(bench_kind_title(static_cast<BenchKind>(k))), k);
-    for (const auto& w : {tr("Sequential write  [v0.4]"), tr("Random write  [v0.4]"), tr("Sustained write  [v0.4]")}) {
-        kind_->addItem(w, -1);
-        if (auto* m = qobject_cast<QStandardItemModel*>(kind_->model())) m->item(kind_->count() - 1)->setEnabled(false);
-    }
     f->addRow(tr("Test:"), kind_);
 
     block_ = new QComboBox(box);
@@ -190,7 +187,7 @@ QWidget* BenchmarkTab::buildSettings() {
     direct_->setChecked(true);
     f->addRow(QString(), direct_);
 
-    auto* note = new QLabel(tr("Read-only. Throughput = bytes / wall time; latency = per request."), box);
+    auto* note = new QLabel(tr("Read tests are read-only. Write tests DESTROY data in the LBA range given here (both ends required) and ask for confirmation. Throughput = bytes / wall time; latency = per request."), box);
     note->setObjectName(QStringLiteral("placeholder"));
     note->setWordWrap(true);
     f->addRow(QString(), note);
@@ -309,7 +306,7 @@ void BenchmarkTab::onKindChanged() {
     sizes_->setEnabled(!running && k == BenchKind::block_sizes);
     qds_->setEnabled(!running && k == BenchKind::queue_depths);
     qd_->setEnabled(!running && k != BenchKind::access_time && k != BenchKind::queue_depths);
-    size_limit_->setEnabled(!running && (k == BenchKind::sequential || k == BenchKind::block_sizes));
+    size_limit_->setEnabled(!running && (k == BenchKind::sequential || k == BenchKind::block_sizes || is_write_kind(k)));
     block_->setEnabled(!running && k != BenchKind::block_sizes);
     refreshHistory();
 }
@@ -417,19 +414,45 @@ void BenchmarkTab::startBenchmark() {
         QMessageBox::warning(this, tr("Benchmark"), error);
         return;
     }
-    auto created = create_benchmark(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
-    if (!created) {
-        const auto msg = QString::fromStdString(created.error().describe());
-        emit logEvent(Severity::error, tr("Cannot open device for benchmarking: %1").arg(msg), target_path_);
-        QMessageBox::warning(this, tr("Benchmark"),
-                             tr("Cannot open %1 for reading:\n%2%3")
-                                 .arg(target_path_, msg,
-                                      created.error().code == Errc::permission_denied
-                                          ? tr("\n\nBenchmarking a physical disk needs root / Administrator.")
-                                          : QString()));
-        return;
+    std::unique_ptr<bench::Benchmark> b;
+    if (is_write_kind(cfg->kind)) {
+        // DESTRUCTIVE: explicit region, then the full preview + typed confirmation.
+        if (end_lba_->text().isEmpty()) {
+            QMessageBox::warning(this, tr("Benchmark"),
+                                 tr("A write benchmark needs an explicit region. Enter both Start LBA and End LBA."));
+            return;
+        }
+        safety::Request req;
+        req.kind = safety::Kind::write_test;
+        req.target.path = target_path_.toStdString();
+        req.target.is_image = target_is_image_;
+        req.target.image_sector_size = target_sector_;
+        req.ranges.push_back(LbaRange{cfg->start_lba, cfg->end_lba - cfg->start_lba + 1});
+        req.summary = std::string(bench_kind_title(cfg->kind)) + " benchmark";
+        auto out = confirm_and_authorize(this, tr("Confirm Write Benchmark"), req, false);
+        if (out.cancelled) return;
+        if (!out.target) {
+            emit logEvent(Severity::error, tr("Write benchmark refused: %1").arg(out.error), target_path_);
+            QMessageBox::warning(this, tr("Benchmark"), out.error);
+            return;
+        }
+        emit logEvent(Severity::warning, tr("Write benchmark authorized (destroys data in the chosen range)"), target_path_);
+        b = std::make_unique<bench::Benchmark>(std::move(*out.target), *cfg);
+    } else {
+        auto created = create_benchmark(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
+        if (!created) {
+            const auto msg = QString::fromStdString(created.error().describe());
+            emit logEvent(Severity::error, tr("Cannot open device for benchmarking: %1").arg(msg), target_path_);
+            QMessageBox::warning(this, tr("Benchmark"),
+                                 tr("Cannot open %1 for reading:\n%2%3")
+                                     .arg(target_path_, msg,
+                                          created.error().code == Errc::permission_denied
+                                              ? tr("\n\nBenchmarking a physical disk needs root / Administrator.")
+                                              : QString()));
+            return;
+        }
+        b = std::move(created).value();
     }
-    auto b = std::move(created).value();
     if (auto v = b->validate(); !v) {
         const auto msg = QString::fromStdString(v.error().describe());
         emit logEvent(Severity::error, tr("Invalid benchmark settings: %1").arg(msg), target_path_);
@@ -525,10 +548,12 @@ void BenchmarkTab::showResult(const BenchResult& r) {
     chart_kind_->clear();
     switch (r.config.kind) {
         case BenchKind::sequential:
+        case BenchKind::sequential_write:
             chart_kind_->addItem(tr("Throughput vs time"), kTimeRate);
             chart_kind_->addItem(tr("Throughput vs position"), kPosition);
             break;
         case BenchKind::random:
+        case BenchKind::random_write:
         case BenchKind::access_time: chart_kind_->addItem(tr("IOPS vs time"), kTimeIops); break;
         case BenchKind::speed_curve: chart_kind_->addItem(tr("Read speed vs position"), kPosition); break;
         case BenchKind::block_sizes:

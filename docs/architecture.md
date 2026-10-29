@@ -56,7 +56,7 @@
 | operation engine (`src/core/operations`) | v0.2 |
 | surface scan (`src/surface`) | v0.2 |
 | benchmark (`src/benchmark`) | v0.3 |
-| erase (`src/erase`) | v0.4 |
+| safety gate (`core/safety`), erase (`src/erase`), write scans / write benchmarks | v0.4 (done) |
 | partition editing, filesystem creation | v0.5 |
 | imaging / cloning, zstd (`src/imaging`) | v0.6 |
 | hex inspector, qualification, SQLite history (`src/storage`) | v0.7 |

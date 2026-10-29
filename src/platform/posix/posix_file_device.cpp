@@ -75,6 +75,27 @@ public:
         return {};
     }
 
+    Status discard(std::uint64_t offset, std::uint64_t length) override {
+        if (mode_ != OpenMode::read_write) return Error{Errc::read_only, "device was opened read-only"};
+        const auto end = checked_add(offset, length);
+        if (!end || *end > info_.capacity_bytes)
+            return Error{Errc::out_of_range, "discard range lies outside the device"};
+#ifdef __linux__
+        if (info_.bus == BusType::image) {
+            // Hole punching returns the range to zeros on filesystems that support it.
+            if (::fallocate(fd_, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, static_cast<off_t>(offset),
+                            static_cast<off_t>(length)) != 0)
+                return os_error("fallocate(PUNCH_HOLE)", errno);
+            return {};
+        }
+        std::uint64_t range[2] = {offset, length};
+        if (::ioctl(fd_, BLKDISCARD, &range) != 0) return os_error("ioctl(BLKDISCARD)", errno);
+        return {};
+#else
+        return Error{Errc::unsupported, "discard is only implemented on Linux"};
+#endif
+    }
+
 private:
     Result<IOResult> transfer(std::uint64_t offset, char* buf, std::size_t length, bool writing) {
         IOResult res;

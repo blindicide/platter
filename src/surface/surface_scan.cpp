@@ -107,19 +107,39 @@ SurfaceScan::SurfaceScan(BlockDevicePtr device, ScanConfig config)
     if (dev_) info_ = dev_->info();
 }
 
+SurfaceScan::SurfaceScan(safety::AuthorizedTarget target, ScanConfig config)
+    : Operation("surface-scan", target.device_id(), AccessKind::exclusive),
+      auth_(std::make_unique<safety::AuthorizedTarget>(std::move(target))),
+      info_(auth_->info()),
+      config_(std::move(config)) {
+    for (const auto& w : auth_->warnings()) warnings_.push_back(w);
+}
+
 SurfaceScan::~SurfaceScan() {
     cancel();
     wait();
 }
 
 Status SurfaceScan::do_validate() {
-    if (!dev_) return Error{Errc::invalid_argument, "no device"};
-    if (config_.mode != ScanMode::read)
-        return Error{Errc::unsupported, std::string(scan_mode_name(config_.mode)) +
-                                            " scans are not available in this version (READ only)"};
-    // A surface scan must never hold a writable handle (spec §6.1, §17).
-    if (dev_->mode() != OpenMode::read_only)
-        return Error{Errc::invalid_argument, "surface scan requires a read-only device handle"};
+    if (!dev_ && !auth_) return Error{Errc::invalid_argument, "no device"};
+    if (config_.mode == ScanMode::verify)
+        return Error{Errc::unsupported, "VERIFY scans need a device-side verify command, which this build does not issue"};
+    if (is_write_mode(config_.mode)) {
+        if (!auth_) return Error{Errc::refused, std::string(scan_mode_name(config_.mode)) +
+                                                   " scans destroy data and need a confirmed authorization"};
+        if (auth_->kind() != safety::Kind::write_test)
+            return Error{Errc::refused, "the authorization was not granted for a write test"};
+        if (config_.pattern.size() > 4096) return Error{Errc::invalid_argument, "the pattern must be at most 4096 bytes"};
+        if (config_.mode == ScanMode::custom_pattern && config_.pattern.empty())
+            return Error{Errc::invalid_argument, "custom pattern mode needs a pattern"};
+        if (auth_->direct_io() && config_.block_bytes % auth_->required_alignment() != 0)
+            return Error{Errc::misaligned, "block size must be a multiple of the I/O alignment"};
+    } else {
+        if (auth_) return Error{Errc::invalid_argument, "READ scans never use a writable authorization"};
+        // A surface scan must never hold a writable handle (spec §6.1, §17).
+        if (dev_->mode() != OpenMode::read_only)
+            return Error{Errc::invalid_argument, "surface scan requires a read-only device handle"};
+    }
 
     const auto ss = info_.logical_sector_size;
     const auto total = info_.total_lbas();
@@ -154,7 +174,11 @@ Status SurfaceScan::do_validate() {
     stats_.device_bytes = info_.capacity_bytes;
     order_ = make_order(layout_.block_count, config_.order, config_.sample_percent, config_.seed);
     std::uint64_t bytes = 0;
-    for (auto i : order_) bytes += layout_.lba_count(i) * ss;
+    for (auto i : order_) {
+        bytes += layout_.lba_count(i) * ss;
+        if (auth_ && !auth_->allows(layout_.first_lba(i) * ss, layout_.lba_count(i) * ss))
+            return Error{Errc::refused, "the scan range extends outside the range that was confirmed"};
+    }
     stats_.total_bytes = bytes;
     set_total_bytes(bytes);
     return {};
@@ -178,8 +202,20 @@ void SurfaceScan::record(std::uint64_t index, const BlockResult& r, std::uint64_
 }
 
 Status SurfaceScan::do_run(OperationControl& control) {
-    auto lease = DeviceLeaseRegistry::global().acquire(device_id(), access());
-    if (!lease) return lease.error();
+    // An authorized target already owns the exclusive lease.
+    DeviceLeaseRegistry::Lease lease;
+    if (!auth_) {
+        auto l = DeviceLeaseRegistry::global().acquire(device_id(), access());
+        if (!l) return l.error();
+        lease = std::move(l).value();
+    }
+    const bool writing = is_write_mode(config_.mode);
+    const bool readback = reads_back(config_.mode);
+    std::vector<std::uint8_t> pattern = config_.pattern;
+    if (pattern.empty()) pattern = {0xA5, 0x5A};
+    AlignedBuffer rbuf(readback ? config_.block_bytes : 1, std::max<std::size_t>(4096, info_.logical_sector_size));
+    if (writing && !auth_->direct_io() && readback)
+        note_warning("direct I/O is not in use; read-back may be served from the OS cache and hide bad sectors");
 
     const std::size_t align = std::max<std::size_t>(4096, info_.logical_sector_size);
     AlignedBuffer buf(config_.block_bytes, align);
@@ -197,10 +233,30 @@ Status SurfaceScan::do_run(OperationControl& control) {
         BlockResult br;
         std::uint64_t dur_ns = 0;
         Errc last = Errc::ok;
+        if (writing) {
+            auto* out = reinterpret_cast<std::uint8_t*>(buf.data);
+            const std::size_t plen = pattern.size();
+            for (std::size_t i = 0; i < len; ++i) out[i] = pattern[(offset + i) % plen];
+        }
         for (std::uint32_t attempt = 0; attempt <= config_.retries; ++attempt) {
             br.retries = static_cast<std::uint8_t>(attempt);  // attempts beyond the first, success or not
             const auto t0 = std::chrono::steady_clock::now();
-            auto r = dev_->read(offset, buf.data, len);
+            auto r = writing ? auth_->write(offset, buf.data, len) : dev_->read(offset, buf.data, len);
+            if (r && readback) {
+                // Write succeeded; read it back and compare.
+                const auto dur_w = r->duration_ns;
+                auto rr = auth_->read(offset, rbuf.data, len);
+                if (rr) {
+                    if (std::memcmp(buf.data, rbuf.data, len) != 0) {
+                        dur_ns = dur_w + rr->duration_ns;
+                        last = Errc::corrupt_data;
+                        continue;  // retry the write+read pair
+                    }
+                    r = IOResult{r->bytes, dur_w + rr->duration_ns};
+                } else {
+                    r = rr.error();
+                }
+            }
             if (r) {
                 dur_ns = r->duration_ns;
                 last = Errc::ok;
@@ -232,6 +288,9 @@ Status SurfaceScan::do_run(OperationControl& control) {
             if (config_.error_policy == ErrorPolicy::stop_after_n && failed >= config_.max_errors)
                 return Error{Errc::io_error, "stopped after " + std::to_string(failed) + " failed block(s)"};
         }
+    }
+    if (auth_) {
+        if (auto f = auth_->flush(); !f) return f.error();
     }
     return {};
 }

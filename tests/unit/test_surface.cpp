@@ -281,7 +281,7 @@ TEST_CASE("invalid configurations are rejected at validation", "[surface][safety
         CHECK(v.error().code == expected);
         CHECK(scan.state() == OperationState::failed);
     };
-    check_rejected([](ScanConfig& c) { c.mode = ScanMode::write; }, Errc::unsupported);
+    check_rejected([](ScanConfig& c) { c.mode = ScanMode::write; }, Errc::refused);
     check_rejected([](ScanConfig& c) { c.mode = ScanMode::verify; }, Errc::unsupported);
     check_rejected([](ScanConfig& c) { c.block_bytes = 1000; }, Errc::invalid_argument);
     check_rejected([](ScanConfig& c) { c.block_bytes = 128u << 20; }, Errc::invalid_argument);

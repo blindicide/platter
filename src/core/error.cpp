@@ -23,6 +23,7 @@ std::string_view errc_name(Errc e) noexcept {
         case Errc::corrupt_data: return "corrupt_data";
         case Errc::external_tool_failed: return "external_tool_failed";
         case Errc::internal: return "internal";
+        case Errc::refused: return "refused";
     }
     return "unknown";
 }

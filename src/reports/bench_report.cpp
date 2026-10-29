@@ -193,7 +193,7 @@ std::string bench_to_text(const BenchResult& r, const Privacy& p) {
     row("Region (LBA)", std::to_string(c.start_lba) + " - " +
                             (c.end_lba == UINT64_MAX ? std::string("end") : std::to_string(c.end_lba)));
     row("Block size", std::to_string(c.block_bytes) + " bytes");
-    row("Queue depth", std::to_string(c.queue_depth) + " (threads with independent handles)");
+    row("Queue depth", std::to_string(c.queue_depth) + (is_write_kind(c.kind) ? " (threads sharing one authorized handle)" : " (threads with independent handles)"));
     if (c.max_bytes) row("Size limit / phase", format_capacity(c.max_bytes));
     row("Time limit / phase", f("%.1f s", c.max_seconds));
     if (c.kind == BenchKind::speed_curve)

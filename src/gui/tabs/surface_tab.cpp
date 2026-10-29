@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: TBD
 #include "surface_tab.hpp"
+#include "../widgets/confirm_dialog.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -129,14 +130,18 @@ QWidget* SurfaceTab::buildSettings() {
 
     mode_ = new QComboBox(box);
     mode_->addItem(tr("READ"));
-    for (const auto& [name, ver] : {std::pair{tr("VERIFY"), QStringLiteral("v0.4")},
-                                    std::pair{tr("WRITE (destructive)"), QStringLiteral("v0.4")},
-                                    std::pair{tr("WRITE + READBACK"), QStringLiteral("v0.4")}}) {
-        mode_->addItem(QStringLiteral("%1  [%2]").arg(name, ver));
-        auto* m = qobject_cast<QStandardItemModel*>(mode_->model());
-        if (m) m->item(mode_->count() - 1)->setEnabled(false);
-    }
+    mode_->addItem(tr("WRITE (destructive)"));
+    mode_->addItem(tr("WRITE + READBACK (destructive)"));
+    mode_->addItem(tr("CUSTOM PATTERN (destructive)"));
     f->addRow(tr("Mode:"), mode_);
+    pattern_ = new QLineEdit(box);
+    pattern_->setPlaceholderText(tr("hex bytes, e.g. DEADBEEF"));
+    pattern_->setValidator(new QRegularExpressionValidator(QRegularExpression(QStringLiteral("([0-9A-Fa-f]{2}){0,2048}")), box));
+    pattern_->setToolTip(tr("Repeating byte pattern for the write modes (default A5 5A)"));
+    pattern_->setEnabled(false);
+    f->addRow(tr("Pattern:"), pattern_);
+    connect(mode_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this](int i) { pattern_->setEnabled(i != 0 && !isRunning()); });
 
     auto* digits = new QRegularExpressionValidator(QRegularExpression(QStringLiteral("\\d{0,20}")), box);
     start_lba_ = new QLineEdit(box);
@@ -351,7 +356,24 @@ void SurfaceTab::stopAndWait() {
 
 std::optional<ScanConfig> SurfaceTab::readConfig(QString& error) const {
     ScanConfig c;
-    c.mode = ScanMode::read;
+    switch (mode_->currentIndex()) {
+        case 1: c.mode = ScanMode::write; break;
+        case 2: c.mode = ScanMode::write_readback; break;
+        case 3: c.mode = ScanMode::custom_pattern; break;
+        default: c.mode = ScanMode::read; break;
+    }
+    if (is_write_mode(c.mode)) {
+        const auto hex = pattern_->text();
+        if (hex.size() % 2 != 0) {
+            error = tr("The pattern needs an even number of hex digits.");
+            return std::nullopt;
+        }
+        for (int i = 0; i + 1 < hex.size(); i += 2) c.pattern.push_back(static_cast<std::uint8_t>(hex.mid(i, 2).toUInt(nullptr, 16)));
+        if (c.mode == ScanMode::custom_pattern && c.pattern.empty()) {
+            error = tr("Enter the pattern to write.");
+            return std::nullopt;
+        }
+    }
     bool ok = true;
     c.start_lba = start_lba_->text().isEmpty() ? 0 : start_lba_->text().toULongLong(&ok);
     if (!ok) {
@@ -383,6 +405,7 @@ std::optional<ScanConfig> SurfaceTab::readConfig(QString& error) const {
 }
 
 void SurfaceTab::setSettingsEnabled(bool on) {
+    pattern_->setEnabled(on && mode_->currentIndex() != 0);
     for (QWidget* w : std::initializer_list<QWidget*>{mode_, start_lba_, end_lba_, block_, order_, retries_, on_error_,
                                                      direct_, defaults_, thr_[0], thr_[1], thr_[2], thr_[3]})
         w->setEnabled(on);
@@ -415,19 +438,45 @@ void SurfaceTab::startScan() {
         QMessageBox::warning(this, tr("Surface Scan"), error);
         return;
     }
-    auto created = create_scan(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
-    if (!created) {
-        const auto msg = QString::fromStdString(created.error().describe());
-        emit logEvent(Severity::error, tr("Cannot open device for scanning: %1").arg(msg), target_path_);
-        QMessageBox::warning(this, tr("Surface Scan"),
-                             tr("Cannot open %1 for reading:\n%2%3")
-                                 .arg(target_path_, msg,
-                                      created.error().code == Errc::permission_denied
-                                          ? tr("\n\nScanning a physical disk needs root / Administrator.")
-                                          : QString()));
-        return;
+    std::unique_ptr<SurfaceScan> scan;
+    if (is_write_mode(cfg->mode)) {
+        // DESTRUCTIVE: preview + typed confirmation; the range is whatever the
+        // user entered (whole device when End LBA is blank).
+        safety::Request req;
+        req.kind = safety::Kind::write_test;
+        req.target.path = target_path_.toStdString();
+        req.target.is_image = target_is_image_;
+        req.target.image_sector_size = target_sector_;
+        if (cfg->end_lba != UINT64_MAX) req.ranges.push_back(LbaRange{cfg->start_lba, cfg->end_lba - cfg->start_lba + 1});
+        else if (cfg->start_lba != 0) {
+            QMessageBox::warning(this, tr("Surface Scan"), tr("Enter an End LBA too, or leave both Start and End at their defaults for the whole device."));
+            return;
+        }
+        req.summary = std::string(scan_mode_name(cfg->mode)) + " surface scan";
+        auto out = confirm_and_authorize(this, tr("Confirm Write Scan"), req, false);
+        if (out.cancelled) return;
+        if (!out.target) {
+            emit logEvent(Severity::error, tr("Write scan refused: %1").arg(out.error), target_path_);
+            QMessageBox::warning(this, tr("Surface Scan"), out.error);
+            return;
+        }
+        emit logEvent(Severity::warning, tr("Write scan authorized (destroys data in the chosen range)"), target_path_);
+        scan = std::make_unique<SurfaceScan>(std::move(*out.target), *cfg);
+    } else {
+        auto created = create_scan(target_path_.toStdString(), target_is_image_, *cfg, target_sector_);
+        if (!created) {
+            const auto msg = QString::fromStdString(created.error().describe());
+            emit logEvent(Severity::error, tr("Cannot open device for scanning: %1").arg(msg), target_path_);
+            QMessageBox::warning(this, tr("Surface Scan"),
+                                 tr("Cannot open %1 for reading:\n%2%3")
+                                     .arg(target_path_, msg,
+                                          created.error().code == Errc::permission_denied
+                                              ? tr("\n\nScanning a physical disk needs root / Administrator.")
+                                              : QString()));
+            return;
+        }
+        scan = std::move(created).value();
     }
-    auto scan = std::move(created).value();
     if (auto v = scan->validate(); !v) {
         const auto msg = QString::fromStdString(v.error().describe());
         emit logEvent(Severity::error, tr("Invalid scan settings: %1").arg(msg), target_path_);
@@ -441,12 +490,14 @@ void SurfaceTab::startScan() {
     }
     const auto& L = scan->layout();
     emit logEvent(Severity::info,
-                  tr("Surface scan started (READ, %1 blocks of %2 bytes, LBA %3-%4, %5)")
+                  tr("Surface scan started (%6, %1 blocks of %2 bytes, LBA %3-%4, %5)")
                       .arg(L.block_count)
                       .arg(scan->config().block_bytes)
                       .arg(L.start_lba)
                       .arg(L.end_lba)
-                      .arg(scan->config().direct_io ? tr("direct I/O") : tr("buffered I/O")),
+                      .arg(scan->config().direct_io ? tr("direct I/O") : tr("buffered I/O"))
+                      .arg(QString::fromUtf8(scan_mode_name(scan->config().mode).data(),
+                                             static_cast<qsizetype>(scan_mode_name(scan->config().mode).size()))),
                   target_path_);
     scan_ = std::move(scan);
     view_.reset();

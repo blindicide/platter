@@ -1,7 +1,9 @@
 # platter-cli reference
 
-`platter-cli` uses the same core libraries as the GUI. **Every command is
-read-only**: nothing opens a device for writing.
+`platter-cli` uses the same core libraries as the GUI. Commands are read-only
+unless marked **destructive** below; destructive commands go through the
+safety pipeline in [safety.md](safety.md): preview, typed confirmation and
+identity re-check before the first write.
 
 ```
 platter-cli [options] <command> [arguments]
@@ -16,6 +18,11 @@ platter-cli [options] <command> [arguments]
 | `partitions list <device>` | Reads and validates the MBR/GPT. Reports CRC problems, backup-GPT fallback, overlaps, out-of-bounds entries and 1 MiB alignment. | Yes for physical devices (reads sectors) |
 | `surface scan <device>` | Read-only block-level surface scan: per-block latency classes, unreadable ranges, throughput and latency percentiles. Prints a text report (or JSON with `--json`); can also write CSV and a text report. Ctrl+C stops cleanly and still reports partial results. | Yes for physical devices |
 | `benchmark read <device>` | Read benchmark: `--test seq` (default), `random`, `access`, `curve`, `sizes`, `qd`. Reports MB/s, MiB/s, IOPS and latency percentiles per phase, plus caveats when results may not reflect the physical device. `--chart` adds an ASCII chart. | Yes for physical devices |
+| `surface scan <device> --mode write\|write-readback\|pattern` | **Destructive.** Writes a pattern (default `A5 5A`, or `--pattern HEX`) over the range, optionally reading it back and comparing. Range from `--start/--end` (default: the whole device). | Yes |
+| `benchmark read <device> --test write-seq\|write-random` | **Destructive.** Write benchmark in an explicit `--start/--end` region. Reports MB/s, IOPS, latency; flush time is included. | Yes |
+| `erase run <device>` | **Destructive.** Overwrite erase with `--method`, `--verify`, optional `--range`/`--start`/`--end`, `--report FILE`, `--save`. See below. | Yes |
+| `erase methods` | Lists the methods and their pass counts. | No |
+| `erase history` / `erase show <id>` | Saved erase sessions and their full reports. | No |
 | `benchmark history [<device>]` | Lists saved benchmark sessions (newest first), optionally for one device. | No |
 | `benchmark show <id>` | Re-prints a saved session (text, or JSON with `--json`; `--chart` works too). | No |
 | `smart show <device>` | Runs `smartctl --json=c -a` and prints attributes / NVMe health log plus a conservative assessment with every contributing observation. | Usually yes |
@@ -122,6 +129,8 @@ platter-cli benchmark show 12 --chart
 | 11 | `smart show`: health CRITICAL |
 | 12 | `smart show`: health UNKNOWN |
 | 13 | Cancelled by the user (Ctrl+C); partial results are still reported |
+| 14 | Refused: blocked by the safety checks, no or wrong confirmation, or the device changed since the preview |
+| 15 | Erase completed with errors (sectors that could not be written or did not verify) |
 
 ## smartctl
 
@@ -130,8 +139,41 @@ Lookup order: `$PLATTER_SMARTCTL`, `PATH`, then
 `C:\Program Files\smartmontools\bin\smartctl.exe` (Windows) or
 `/usr/sbin/smartctl` (Linux). Only the read-only `-a` query is ever issued. On Windows, `\\.\PhysicalDriveN` is passed to smartctl as `/dev/pdN`.
 
-## Destructive commands (future)
+## Destructive commands
 
-From v0.4 on, destructive commands will require explicit target flags (e.g.
-`--target <stable-id>`), re-validate device identity immediately before I/O,
-and run the same safety checks as the GUI (see `docs/safety.md`).
+All of them print the preview (target, model, capacity, ranges, bytes
+affected, warnings, blockers) to stderr, then need the typed confirmation:
+`--confirm TEXT`, or an interactive prompt when stdin is a terminal. TEXT is
+the model name or the last four characters of the serial (for an image: the
+file name). `--dry-run` prints the preview and exits 0 without writing.
+Mounted devices, the system disk, swap, read-only media and devices with
+holders are refused (exit 14) and cannot be forced.
+
+### `erase run <device>`
+
+| Option | Meaning |
+|---|---|
+| `--method M` | `zero` (default), `one`, `random`, `random_n`, `dod3`, `dod7`, `pattern`, `discard`; see `erase methods` |
+| `--passes N` | Random passes (1-99); turns `random` into `random_n` |
+| `--pattern HEX` | Byte pattern for `pattern` (1-4096 bytes) |
+| `--verify V` | `none`, `last` (default) or `every` |
+| `--range F:C[,F:C]` or `--start/--end` | LBA ranges (default: whole device) |
+| `--block-size SIZE` | Request size (default 1M) |
+| `--confirm TEXT`, `--dry-run` | As above |
+| `--report FILE`, `--save`, `--history-db FILE`, `--json` | Output and history |
+
+The verdict is one of `ERASED AND VERIFIED`, `ERASED (NOT VERIFIED)`,
+`COMPLETED WITH ERRORS` (exit 15) or `INCOMPLETE` (cancelled / failed).
+The report ends with a SHA-256 digest of its body and a plain statement of the
+limits of software overwrite on remapped blocks.
+
+Discard (`--method discard`) issues TRIM / hole-punching (`BLKDISCARD` on
+Linux block devices, `fallocate(PUNCH_HOLE)` on images); unsupported on
+Windows. Hardware secure erase is not offered.
+
+### Write scans and write benchmarks
+
+`surface scan --mode write|write-readback|pattern` and
+`benchmark read --test write-seq|write-random` (the subcommand keeps its name)
+use the same options as their read counterparts, plus `--confirm`, `--dry-run`
+and `--pattern`. Write benchmarks require an explicit `--start` and `--end`.

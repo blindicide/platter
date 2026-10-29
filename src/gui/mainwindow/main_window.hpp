@@ -26,6 +26,7 @@ class SmartTab;
 class PartitionsTab;
 class SurfaceTab;
 class BenchmarkTab;
+class EraseTab;
 class LogTab;
 
 class MainWindow final : public QMainWindow {
@@ -87,6 +88,7 @@ private:
     PartitionsTab* part_tab_ = nullptr;
     SurfaceTab* surface_tab_ = nullptr;
     BenchmarkTab* bench_tab_ = nullptr;
+    EraseTab* erase_tab_ = nullptr;
     std::unique_ptr<storage::HistoryStore> history_;
     bool record_history_ = true;
     LogTab* log_tab_ = nullptr;

@@ -15,8 +15,10 @@ file after every significant change. Newest status at the top of each section.
   dir (`sysfs::Roots` makes every path injectable). Never test against the
   build machine's real `/sys`.
 - Read-write opening (`OpenMode::read_write`) is reserved for destructive
-  operations that go through the full safety pipeline (spec §9.5, §17). As of
-  v0.1 nothing opens a physical device read-write.
+  operations that go through the full safety pipeline (`safety::authorize()`,
+  spec §9.5, §17). Never open a device read-write any other way, and never
+  construct an `AuthorizedTarget` outside tests (`safety::TestAccess`).
+  Destructive code runs only against temp image files / `FaultyWriteDevice`.
 - Owner's disposable test hardware (for later, with permission): a clean 1 TB
   HDD and a USB stick.
 
@@ -34,11 +36,63 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.4 Erase + write tests — feature-complete in code, never run on
+real hardware** (see "v0.4 so far"). Previously: **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.4 so far
+- **Safety gate** `include/platter/core/safety.hpp`, `src/core/safety.cpp`:
+  `Request` -> `make_preview()`/`preview_for()` -> `Preview` (blockers, warnings,
+  accepted confirmations, prompt) -> `authorize(Preview, typed)` ->
+  move-only `AuthorizedTarget` (exclusive lease + O_EXCL RW handle + identity
+  re-check; write/discard refused outside confirmed ranges). `preview_text()`
+  renders the preview for CLI and GUI. Audit sink via `set_audit_sink()`.
+  Kinds: erase, write_test, partition_edit, filesystem_create, restore_image,
+  clone_target, qualification (the last four are reserved for v0.5/v0.6/v0.7).
+  Tests: `tests/unit/test_safety.cpp`; test-only construction through
+  `safety::TestAccess::make()` in `tests/support/write_support.hpp`, together
+  with `FaultyWriteDevice` (bad_write_lbas, dropped_lbas, bad_read_lbas,
+  remove_after_writes, write_delay, write_log).
+- **Erase engine** `include/platter/erase/erase.hpp`, `src/erase/erase.cpp`:
+  methods zero / one / random / random_n / dod3 / dod7 / pattern / discard,
+  verify none / last / every, position-addressed fills (pattern phase and
+  ChaCha20 keystream by absolute offset so verification regenerates the data),
+  sector-wise fallback on write failure, verdicts, `Errc::refused`.
+  ChaCha20 (RFC 8439) in `core/chacha20.*`. `IBlockDevice::discard()` (virtual,
+  default unsupported): `fallocate(PUNCH_HOLE)` for images, `BLKDISCARD` for
+  Linux block devices, nothing on Windows. Reports: `reports/erase_report.*`
+  (schema `erase-report` v1, `report_sha256` of the body). History:
+  `SessionKind::{erase,imaging,qualification}`, `record_erase/load_erase`,
+  generic `record_document/load_document`.
+- **Hardware secure erase (ATA Secure Erase / NVMe Sanitize) is deliberately NOT
+  implemented** (can brick drives; untestable here). The spec asked for it;
+  decide with the owner before ever adding it.
+- **Write benchmarks**: `BenchKind::sequential_write` / `random_write`; the
+  `Benchmark(AuthorizedTarget, BenchConfig)` constructor (kind write_test, region
+  inside confirmed ranges, threads share the single authorized handle, flush
+  counted in phase time). Read constructor refuses write kinds.
+- **Write surface scans**: `SurfaceScan(AuthorizedTarget, ScanConfig)` with modes
+  write, write_readback, custom_pattern (`ScanConfig::pattern`; default A5 5A;
+  readback mismatch = `Errc::corrupt_data` block). VERIFY mode is still
+  unsupported (needs a device-side verify command).
+- **CLI**: shared helpers in `src/cli/common.hpp` (`authorize_from_cli()` is the
+  whole destructive front half: preview, refuse, --dry-run, confirmation,
+  authorize); `erase run|methods|history|show` in `src/cli/cmd_erase.cpp`;
+  `surface scan --mode ...`; `benchmark read --test write-seq|write-random`.
+  New exit codes 14 (refused) and 15 (erase completed with errors).
+- **GUI**: `widgets/confirm_dialog.*` (`confirm_and_authorize()`: the only GUI
+  way to a destructive operation; button disabled until the typed text
+  matches), `tabs/erase_tab.*` (ERASE tab), SURFACE tab write modes, BENCHMARK
+  tab write kinds. Status bar says "CONFIRM TO WRITE".
+- **Windows**: `win32_file_device.cpp` locks + dismounts every volume of a
+  physical disk before an exclusive RW open (`lock_volumes_of_disk`) and issues
+  FSCTL_ALLOW_EXTENDED_DASD_IO. Compile-checked with MinGW only; never run.
+- Project version 0.4.0.
+- NOT done / unvalidated: any real-hardware run, Windows runtime behaviour,
+  the Windows write path under MSVC beyond what CI compiles.
 
 ### v0.3 so far
 - Owner chose to skip the real-hardware run for v0.2 for now and move on.
@@ -277,11 +331,12 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 - README.md, docs/architecture.md, docs/safety.md, docs/cli-reference.md.
 
 ### Next up (in order)
-1. Get CI green on both OSes (first runs started 2026-10-28; see the Actions tab).
-2. Owner's first real-hardware read-only run (devices list / info / smart /
-   partitions) on Windows and in WSL or a Linux VM, with the important drive
-   unplugged. Capture real smartctl JSON as fixtures (strip serials).
-3. v0.2: operation engine (spec §3.3) + read-only surface scan (spec §6).
+1. Owner's real-hardware runs (read-only first, then destructive on the
+   disposable 1 TB HDD / USB stick with every other disk unplugged).
+2. v0.5 partition editing and filesystem creation, then v0.6 imaging/cloning,
+   v0.7 hex inspector / qualification / history browser, v0.8 privilege
+   separation, v0.9 settings and polish, v1.0 release prep (see sections below
+   as they get filled in).
 
 ## 3. Layout
 
@@ -296,7 +351,8 @@ src/platform/         file_device.hpp (internal factory), privileges
 src/partitions/       MBR/GPT parser
 src/smart/            smartctl adapter + assessment
 src/reports/          JSON schema
-src/cli/              platter-cli
+src/erase/            overwrite erase engine
+src/cli/              platter-cli (main.cpp, cmd_erase.cpp, common.hpp)
 src/gui/              platter-gui: styles/, widgets/, tabs/, mainwindow/
 tests/unit/ tests/support/ tests/fixtures/smart/
 cmake/                deps, warnings, MinGW toolchain
@@ -341,8 +397,8 @@ Test helpers in `tests/support/` can synthesize GPT (`write_gpt`) and MBR+EBR
 
 - Windows: system-disk detection only checks the volume holding the Windows
   directory; the EFI/boot partition's disk is not yet flagged (TODO v0.8).
-- Windows: exclusive access to physical disks needs FSCTL_LOCK_VOLUME +
-  FSCTL_DISMOUNT_VOLUME per volume (destructive pipeline, v0.4).
+- Windows: volume locking for exclusive disk access is implemented (v0.4) but
+  has never run; first real Windows write test must be on the disposable disk.
 - Windows unit tests have never run (no Wine here); CI will be first.
 - GUI has never been built with MSVC or run on Windows; only Linux/offscreen.
 - Toolbar icons are Qt standard icons; spec wants small monochrome 16x16

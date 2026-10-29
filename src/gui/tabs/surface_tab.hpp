@@ -94,6 +94,7 @@ private:
 
     // Settings widgets
     QComboBox* mode_;
+    QLineEdit* pattern_;
     QLineEdit* start_lba_;
     QLineEdit* end_lba_;
     QComboBox* block_;

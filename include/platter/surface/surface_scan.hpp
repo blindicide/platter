@@ -18,6 +18,7 @@
 #include "platter/core/block_device.hpp"
 #include "platter/core/histogram.hpp"
 #include "platter/core/operation.hpp"
+#include "platter/core/safety.hpp"
 
 namespace platter::surface {
 
@@ -69,7 +70,16 @@ struct ScanConfig {
     ErrorPolicy error_policy = ErrorPolicy::continue_scan;
     std::uint64_t max_errors = 0;
     Thresholds thresholds;
+    // Write modes only: the repeating byte pattern (1 to 4096 bytes), phase
+    // locked to the absolute byte offset. Empty = 0xA5 0x5A, except for
+    // custom_pattern where it is required.
+    std::vector<std::uint8_t> pattern;
 };
+
+constexpr bool is_write_mode(ScanMode m) noexcept {
+    return m == ScanMode::write || m == ScanMode::write_readback || m == ScanMode::custom_pattern;
+}
+constexpr bool reads_back(ScanMode m) noexcept { return m == ScanMode::write_readback || m == ScanMode::custom_pattern; }
 
 // One scanned block. Packed to keep a 1 TB / 1 MiB scan (~1M blocks) small.
 struct BlockResult {
@@ -133,8 +143,11 @@ struct ScanSnapshot {
 
 class SurfaceScan final : public Operation {
 public:
-    // Takes ownership of an already-opened, READ-ONLY device.
+    // Takes ownership of an already-opened, READ-ONLY device (READ mode only).
     SurfaceScan(BlockDevicePtr device, ScanConfig config);
+    // Destructive write modes: runs only through a confirmed authorization
+    // (kind write_test) and only inside the confirmed ranges.
+    SurfaceScan(safety::AuthorizedTarget target, ScanConfig config);
     ~SurfaceScan() override;
 
     const ScanConfig& config() const noexcept { return config_; }
@@ -159,6 +172,7 @@ private:
     void record(std::uint64_t index, const BlockResult& r, std::uint64_t bytes, std::uint64_t latency_us);
 
     BlockDevicePtr dev_;
+    std::unique_ptr<safety::AuthorizedTarget> auth_;
     DeviceInfo info_;
     ScanConfig config_;
     ScanLayout layout_;

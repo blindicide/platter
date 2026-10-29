@@ -52,6 +52,16 @@ public:
     virtual Result<IOResult> write(std::uint64_t offset, const void* buffer, std::size_t length) = 0;
     virtual Status flush() = 0;
 
+    // Tells the device that a byte range no longer holds useful data (TRIM /
+    // UNMAP / hole punching). Optional: the default reports `unsupported`.
+    // Whether the range reads back as zeros afterwards is device specific, so
+    // callers that care must read it back. Requires a read-write handle.
+    virtual Status discard(std::uint64_t offset, std::uint64_t length) {
+        static_cast<void>(offset);
+        static_cast<void>(length);
+        return Error{Errc::unsupported, "discard is not supported by this backend"};
+    }
+
     // Alignment the caller must honour for offsets and lengths.
     virtual std::uint32_t required_alignment() const noexcept = 0;
 

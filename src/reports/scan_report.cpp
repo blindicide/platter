@@ -77,6 +77,12 @@ std::string scan_to_json(const ScanSnapshot& s, const Privacy& p) {
         {"max_errors", c.max_errors},
         {"thresholds_us", c.thresholds.us},
     };
+    if (!c.pattern.empty()) {
+        static const char* hex = "0123456789ABCDEF";
+        std::string h;
+        for (auto b : c.pattern) { h += hex[b >> 4]; h += hex[b & 15]; }
+        j["config"]["pattern_hex"] = h;
+    }
     j["layout"] = {{"start_lba", s.layout.start_lba},
                    {"end_lba", s.layout.end_lba},
                    {"sector_size", s.layout.sector_size},
@@ -146,6 +152,14 @@ Result<ScanSnapshot> scan_from_json(const std::string& text) {
         s.config.error_policy = c.value("error_policy", "continue") == "stop_after_n" ? ErrorPolicy::stop_after_n
                                                                                      : ErrorPolicy::continue_scan;
         s.config.max_errors = c.value("max_errors", std::uint64_t{0});
+        if (c.contains("pattern_hex")) {
+            const auto h = c.at("pattern_hex").get<std::string>();
+            if (h.size() % 2 != 0 || h.size() > 8192) return bad("bad pattern");
+            for (std::size_t i = 0; i < h.size(); i += 2) {
+                try { s.config.pattern.push_back(static_cast<std::uint8_t>(std::stoul(h.substr(i, 2), nullptr, 16))); }
+                catch (...) { return bad("bad pattern"); }
+            }
+        }
         s.config.thresholds.us = c.at("thresholds_us").get<std::array<std::uint32_t, 4>>();
         if (!s.config.thresholds.valid()) return bad("thresholds are not increasing");
 

@@ -1,8 +1,8 @@
 # Safety model
 
-platter will eventually be able to destroy data. These rules exist so it only
-ever destroys the data the user meant, and they apply from v0.1 on, even
-though v0.1 itself never writes.
+platter can destroy data (since v0.4). These rules exist so it only ever
+destroys the data the user meant. They applied from v0.1 on, before any
+write path existed.
 
 ## Layers
 
@@ -35,30 +35,69 @@ though v0.1 itself never writes.
 9. **Privacy.** Serial numbers are masked on screen and omitted from exported
    reports unless the user explicitly opts in for that report.
 
-## Destructive pipeline (v0.4+, design)
+## Destructive pipeline (v0.4, implemented in `core/safety.hpp`)
 
-Before any write to a physical device:
+Nothing may write to a device except through a `safety::AuthorizedTarget`, and
+the only way to obtain one is `safety::authorize()`:
 
-1. Explicit target selection by the user (GUI) or `--target <stable-id>` (CLI).
-2. Capability check: the operation must be in the device's capability set.
-3. Preview: model, capacity, serial (unmasked for this purpose), range, method.
-4. In-use check: mounted / swap / holders / system disk ⇒ refuse.
-5. Typed confirmation for whole-device operations (type the model or the
-   last 4 characters of the serial).
-6. Exclusive open (`O_EXCL` on Linux; lock + dismount every volume on
-   Windows).
-7. **Re-validate identity immediately before the first write**, using the
-   handle that will do the writing.
-8. Bounds-checked I/O with cooperative cancellation; report exactly what was
-   written and verified.
+```
+Request --make_preview()--> Preview  --(user types the confirmation)--> authorize() --> AuthorizedTarget
+```
 
-No erase may start automatically at startup, from a saved session, or from
-anything but a fresh, explicit user action.
+1. **Request**: kind (`erase`, `write_test`, ...), target (device path or
+   image file), LBA ranges (empty = whole device) and a one-line summary.
+2. **Preview** (`make_preview`, pure given the described device): model,
+   capacity, sector sizes, ranges, bytes affected, warnings, **blockers** and
+   the exact confirmation the user must type. Blockers: mounted filesystem,
+   dm/LVM/md holders, swap, system disk, read-only media, no write capability,
+   zero capacity, invalid or overlapping ranges.
+3. **Typed confirmation**: the model name or the last four characters of the
+   serial for devices; the file name for images. Case-insensitive, whitespace
+   trimmed. The GUI dialog never pre-fills it and keeps the button disabled
+   until it matches; the CLI takes `--confirm TEXT` or prompts on a terminal,
+   and refuses (exit 14) when neither is available.
+4. **`authorize()`** re-describes the device from scratch, refuses on any
+   blocker or a wrong confirmation, compares the fingerprint (stable id,
+   serial, vendor, model, capacity, sector sizes, bus) with the one the user
+   was shown, takes an **exclusive lease** (`DeviceLeaseRegistry`), opens the
+   device read-write and exclusively (`O_EXCL` on Linux; on Windows every
+   volume on the disk is locked and dismounted, and the open fails with
+   "device busy" if any is in use), and **re-checks the identity of the handle
+   that will do the writing**.
+5. **`AuthorizedTarget`** is move-only. `write()` / `discard()` are refused
+   (`Errc::refused`) outside the confirmed ranges; reads are allowed anywhere
+   (verification, partition tables). It owns the lease until destroyed.
+6. **Audit**: every authorization and refusal is reported to the sink
+   installed with `set_audit_sink()`; records never contain serials.
+
+Further rules for the engines on top (erase, write benchmarks, write scans):
+
+- They accept an `AuthorizedTarget` and nothing else. The read-only
+  constructors refuse write modes with `Errc::refused`.
+- Write scans and write benchmarks validate that their whole region lies inside
+  the confirmed ranges before they start.
+- The CLI never offers a "yes to all" flag; `--dry-run` shows the preview and
+  exits without writing.
+- Reports state what was written and what was verified, and the limits of
+  overwrite erasure (remapped / over-provisioned blocks on flash, SMR zones,
+  reallocated sectors).
+- **Hardware secure erase (ATA Secure Erase, NVMe Sanitize) is deliberately not
+  implemented.** A bad implementation can brick a drive and cannot be tested
+  without sacrificing hardware.
+
+No destructive operation may start automatically at startup, from a saved
+session, or from anything but a fresh, explicit user action.
 
 ## Testing rules
 
 - Unit and integration tests use sparse image files in temp directories.
   They must never open `/dev/*` or `\\.\PhysicalDrive*`.
 - Linux enumeration is tested against a fake sysfs tree built per test.
+- Destructive code is tested only against temp image files and the
+  `FaultyWriteDevice` double (`tests/support/write_support.hpp`), which injects
+  write errors, dropped writes and device removal. Test code builds an
+  `AuthorizedTarget` through `safety::TestAccess`, which is defined only in the
+  test suite.
 - Destructive features are not production-ready until validated on
   dedicated disposable hardware (spec §24), with every other disk unplugged.
+  As of v0.4 that has not happened.

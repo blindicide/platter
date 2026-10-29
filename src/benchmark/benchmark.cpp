@@ -7,12 +7,16 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <optional>
 #include <thread>
 
+#include "platter/core/aligned_buffer.hpp"
+#include "platter/core/chacha20.hpp"
 #include "platter/core/range.hpp"
 #include "platter/core/rng.hpp"
+#include "platter/core/time_util.hpp"
 
 namespace platter::bench {
 
@@ -24,6 +28,8 @@ std::string_view bench_kind_name(BenchKind k) noexcept {
         case BenchKind::speed_curve: return "speed_curve";
         case BenchKind::block_sizes: return "block_sizes";
         case BenchKind::queue_depths: return "queue_depths";
+        case BenchKind::sequential_write: return "sequential_write";
+        case BenchKind::random_write: return "random_write";
     }
     return "?";
 }
@@ -36,6 +42,8 @@ std::string_view bench_kind_title(BenchKind k) noexcept {
         case BenchKind::speed_curve: return "Read speed curve";
         case BenchKind::block_sizes: return "Block size sweep";
         case BenchKind::queue_depths: return "Queue depth sweep";
+        case BenchKind::sequential_write: return "Sequential write";
+        case BenchKind::random_write: return "Random write";
     }
     return "?";
 }
@@ -57,28 +65,7 @@ std::string size_label(std::uint32_t b) {
     return buf;
 }
 
-std::string iso_now() {
-    const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm tm{};
-#ifdef _WIN32
-    gmtime_s(&tm, &now);
-#else
-    gmtime_r(&now, &tm);
-#endif
-    char ts[32];
-    std::strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return ts;
-}
 
-struct AlignedBuffer {
-    std::unique_ptr<std::byte[]> raw;
-    std::byte* data = nullptr;
-    AlignedBuffer(std::size_t size, std::size_t align) : raw(new std::byte[size + align]) {
-        void* p = raw.get();
-        std::size_t space = size + align;
-        data = static_cast<std::byte*>(std::align(align, size, p, space));
-    }
-};
 
 }  // namespace
 
@@ -87,6 +74,7 @@ BenchConfig with_defaults(BenchConfig c, std::uint32_t ss) {
     if (c.block_bytes == 0) {
         switch (c.kind) {
             case BenchKind::random:
+            case BenchKind::random_write:
             case BenchKind::queue_depths: c.block_bytes = round_up_to(4096, ss); break;
             case BenchKind::access_time: c.block_bytes = ss; break;
             default: c.block_bytes = 1u << 20; break;
@@ -94,13 +82,15 @@ BenchConfig with_defaults(BenchConfig c, std::uint32_t ss) {
     }
     if (c.kind == BenchKind::access_time) c.queue_depth = 1;
     if (c.max_bytes == 0) {
-        if (c.kind == BenchKind::sequential) c.max_bytes = 1ull << 30;
+        if (c.kind == BenchKind::sequential || c.kind == BenchKind::sequential_write) c.max_bytes = 1ull << 30;
         if (c.kind == BenchKind::block_sizes) c.max_bytes = 256ull << 20;
     }
     if (c.max_seconds <= 0) {
         switch (c.kind) {
-            case BenchKind::sequential: c.max_seconds = 30; break;
-            case BenchKind::random: c.max_seconds = 10; break;
+            case BenchKind::sequential:
+            case BenchKind::sequential_write: c.max_seconds = 30; break;
+            case BenchKind::random:
+            case BenchKind::random_write: c.max_seconds = 10; break;
             case BenchKind::access_time: c.max_seconds = 5; break;
             case BenchKind::speed_curve: c.max_seconds = 5; break;  // per point, safety cap
             case BenchKind::block_sizes:
@@ -141,9 +131,11 @@ std::string BenchResult::headline() const {
     };
     switch (config.kind) {
         case BenchKind::sequential:
+        case BenchKind::sequential_write:
             std::snprintf(b, sizeof b, "%.1f MB/s", phases.empty() ? 0.0 : phases.front().metrics.mb_per_s);
             break;
         case BenchKind::random:
+        case BenchKind::random_write:
             std::snprintf(b, sizeof b, "%.0f IOPS @ QD%u (%s)", phases.empty() ? 0.0 : phases.front().metrics.iops,
                           config.queue_depth, size_label(config.block_bytes).c_str());
             break;
@@ -180,6 +172,12 @@ Benchmark::Benchmark(DeviceOpener opener, BenchConfig config, std::string device
       cfg_(std::move(config)),
       is_image_(is_image) {}
 
+Benchmark::Benchmark(safety::AuthorizedTarget target, BenchConfig config)
+    : Operation("benchmark", target.device_id(), AccessKind::exclusive),
+      auth_(std::make_unique<safety::AuthorizedTarget>(std::move(target))),
+      cfg_(std::move(config)),
+      is_image_(auth_->info().bus == BusType::image) {}
+
 Benchmark::~Benchmark() {
     cancel();
     wait();
@@ -191,13 +189,23 @@ void Benchmark::note(const std::string& w) {
 }
 
 Status Benchmark::do_validate() {
-    if (!opener_) return Error{Errc::invalid_argument, "no device opener"};
-    auto dev = opener_();
-    if (!dev) return dev.error();
-    // Benchmarks in this module only read. Refuse anything that could write.
-    if ((*dev)->mode() != OpenMode::read_only)
-        return Error{Errc::invalid_argument, "read benchmarks require a read-only device handle"};
-    info_ = (*dev)->info();
+    if (auth_) {
+        if (auth_->kind() != safety::Kind::write_test)
+            return Error{Errc::refused, "the authorization was not granted for a write test"};
+        if (!is_write_kind(cfg_.kind))
+            return Error{Errc::invalid_argument, "an authorized target can only run write benchmarks"};
+        info_ = auth_->info();
+    } else {
+        if (is_write_kind(cfg_.kind))
+            return Error{Errc::refused, "write benchmarks need an authorized target (typed confirmation)"};
+        if (!opener_) return Error{Errc::invalid_argument, "no device opener"};
+        auto dev = opener_();
+        if (!dev) return dev.error();
+        // Read benchmarks only read. Refuse anything that could write.
+        if ((*dev)->mode() != OpenMode::read_only)
+            return Error{Errc::invalid_argument, "read benchmarks require a read-only device handle"};
+        info_ = (*dev)->info();
+    }
     const auto ss = info_.logical_sector_size;
     const auto total = info_.total_lbas();
     if (ss == 0 || total == 0) return Error{Errc::invalid_argument, "device reports zero capacity"};
@@ -210,6 +218,8 @@ Status Benchmark::do_validate() {
     if (auto s = validate_lba_range(*range, total); !s) return s;
     const std::uint64_t region_lbas = range->count;
     const std::uint64_t region_bytes = region_lbas * ss;
+    if (auth_ && !auth_->allows(first_lba_ * ss, region_bytes))
+        return Error{Errc::refused, "the test region is not inside the range that was confirmed for writing"};
 
     auto check_block = [&](std::uint32_t b) -> Status {
         if (b < ss || b % ss != 0 || b > kMaxBlock)
@@ -233,6 +243,16 @@ Status Benchmark::do_validate() {
             if (auto s = check_block(cfg_.block_bytes); !s) return s;
             plan_.push_back({cfg_.kind == BenchKind::random ? "Random" : "Access time", cfg_.block_bytes,
                              cfg_.queue_depth, true, first_lba_, region_lbas, 0, cfg_.max_seconds, false});
+            break;
+        case BenchKind::sequential_write:
+            if (auto s = check_block(cfg_.block_bytes); !s) return s;
+            plan_.push_back({"Sequential write", cfg_.block_bytes, cfg_.queue_depth, false, first_lba_, region_lbas,
+                             cfg_.max_bytes, cfg_.max_seconds, true, true});
+            break;
+        case BenchKind::random_write:
+            if (auto s = check_block(cfg_.block_bytes); !s) return s;
+            plan_.push_back({"Random write", cfg_.block_bytes, cfg_.queue_depth, true, first_lba_, region_lbas, 0,
+                             cfg_.max_seconds, false, true});
             break;
         case BenchKind::speed_curve: {
             if (auto s = check_block(cfg_.block_bytes); !s) return s;
@@ -287,6 +307,15 @@ Status Benchmark::do_validate() {
     if (is_image_)
         note("Image file: results reflect the host filesystem and OS cache, not a physical device.");
     if (!cfg_.direct_io) note("Buffered I/O: reads may be served from the OS page cache.");
+    if (auth_) {
+        note("DESTRUCTIVE: data in LBA " + std::to_string(first_lba_) + " - " + std::to_string(last_lba_) +
+             " was overwritten with random data.");
+        if (!auth_->direct_io())
+            note("Writes went through the OS cache; the data was flushed at the end of each phase.");
+        note("The drive's volatile write cache can inflate short write tests; each phase ends with a flush.");
+        if (cfg_.queue_depth > 1)
+            note("Write queue depth above 1 uses several threads on one exclusive handle (Windows serializes these).");
+    }
     if (cfg_.kind == BenchKind::sequential && std::min(cfg_.max_bytes, region_bytes) < (512ull << 20))
         note("Small test size: a large part of it may be served from the drive's own cache.");
     const bool random_kind = cfg_.kind == BenchKind::random || cfg_.kind == BenchKind::access_time ||
@@ -325,16 +354,33 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
             ++finished;
             fcv.notify_all();
         };
-        auto dev = opener_();
-        if (!dev || (*dev)->mode() != OpenMode::read_only) {
+        Result<BlockDevicePtr> dev = Error{Errc::internal, "unused"};
+        if (!spec.write) {
+            dev = opener_();
+            if (!dev || (*dev)->mode() != OpenMode::read_only) {
+                std::lock_guard lk(fm);
+                if (!fatal) fatal = dev ? Error{Errc::invalid_argument, "worker handle is not read-only"} : dev.error();
+                stop = true;
+                ++finished;
+                fcv.notify_all();
+                return;
+            }
+        } else if (!auth_) {
             std::lock_guard lk(fm);
-            if (!fatal) fatal = dev ? Error{Errc::invalid_argument, "worker handle is not read-only"} : dev.error();
+            if (!fatal) fatal = Error{Errc::refused, "write phase without an authorized target"};
             stop = true;
             ++finished;
             fcv.notify_all();
             return;
         }
         AlignedBuffer buf(spec.block_bytes, align);
+        if (spec.write) {
+            // One block of incompressible data, generated before the clock starts
+            // and re-used (first 8 bytes vary) so generation never limits the rate.
+            ChaCha20 gen(ChaCha20::random_key(), ChaCha20::random_nonce());
+            gen.generate(0, reinterpret_cast<std::uint8_t*>(buf.data()), spec.block_bytes);
+        }
+        std::uint64_t write_counter = 0;
         SplitMix64 rng{phase_seed + 0x1000ull * (t + 1)};
         auto& hist = hists[t];
         while (!stop.load(std::memory_order_relaxed) && !control.cancel_requested()) {
@@ -346,7 +392,14 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
                 if (idx >= seq_limit) break;
             }
             const std::uint64_t lba = spec.region_first_lba + idx * lbas_per;
-            auto r = (*dev)->read(lba * ss, buf.data, spec.block_bytes);
+            Result<IOResult> r = Error{Errc::internal, "unused"};
+            if (spec.write) {
+                const std::uint64_t tag = ++write_counter ^ (static_cast<std::uint64_t>(t) << 56);
+                std::memcpy(buf.data(), &tag, sizeof tag);
+                r = auth_->write(lba * ss, buf.data(), spec.block_bytes);
+            } else {
+                r = (*dev)->read(lba * ss, buf.data(), spec.block_bytes);
+            }
             if (r) {
                 hist.add(r->duration_ns / 1000);
                 bytes.fetch_add(spec.block_bytes, std::memory_order_relaxed);
@@ -355,7 +408,7 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
                 continue;
             }
             const auto code = r.error().code;
-            if (code == Errc::device_removed || code == Errc::not_found) {
+            if (code == Errc::device_removed || code == Errc::not_found || code == Errc::refused) {
                 std::lock_guard lk(fm);
                 if (!fatal) fatal = Error{code, "device disappeared during the benchmark: " + r.error().describe()};
                 stop = true;
@@ -365,7 +418,8 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
                 std::lock_guard lk(fm);
                 if (!fatal)
                     fatal = Error{Errc::io_error, "more than " + std::to_string(kMaxErrors) +
-                                                      " read errors; run a surface scan before benchmarking"};
+                                                      (spec.write ? " write errors; the device is not healthy enough to benchmark"
+                                                                  : " read errors; run a surface scan before benchmarking")};
                 stop = true;
                 break;
             }
@@ -417,6 +471,13 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
         }
     }
     for (auto& t : threads) t.join();
+    if (spec.write && auth_) {
+        // The flush belongs to the measurement: data that is only in a cache has not been written.
+        if (auto f = auth_->flush(); !f) {
+            std::lock_guard lk(fm);
+            if (!fatal) fatal = Error{f.error().code, "flush after the write phase failed: " + f.error().describe()};
+        }
+    }
     const auto end = std::chrono::steady_clock::now();
     if (end - last_sample >= std::chrono::milliseconds(20) || res_.timeline.empty()) sample(end);
     else add_completed(bytes.load() - last_bytes, last_lba.load());
@@ -445,12 +506,17 @@ Status Benchmark::run_phase(const PhaseSpec& spec, OperationControl& control, Po
 }
 
 Status Benchmark::do_run(OperationControl& control) {
-    auto lease = DeviceLeaseRegistry::global().acquire(device_id(), access());
-    if (!lease) return lease.error();
+    // Write benchmarks already hold the exclusive lease through their authorization.
+    DeviceLeaseRegistry::Lease lease;
+    if (!auth_) {
+        auto l = DeviceLeaseRegistry::global().acquire(device_id(), access());
+        if (!l) return l.error();
+        lease = std::move(l).value();
+    }
     t0_ = std::chrono::steady_clock::now();
     {
         std::lock_guard lk(m_);
-        res_.started_utc = iso_now();
+        res_.started_utc = utc_now();
     }
 
     if (cfg_.kind == BenchKind::speed_curve) {

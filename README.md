@@ -6,8 +6,9 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.3 (benchmarking), read-only.** Nothing in this version opens
-> a device for writing. See [HANDOFF.md](HANDOFF.md) for the detailed state of
+> **Status: v0.4 (erase + write tests).** Destructive operations exist and go
+> through a typed-confirmation safety gate, but have only ever been run against
+> image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
 ## What works today
@@ -28,6 +29,9 @@ Win2000-style Qt Widgets interface.
 - Read benchmarks: sequential, random (IOPS), access time, full-disk speed
   curve, block-size and queue-depth sweeps, with latency percentiles, charts
   and explicit caveats when results may reflect caches rather than the device
+- Overwrite erase (zero / one / random / multi-pass / DoD / custom pattern /
+  discard) with read-back verification, honest reports and a typed-confirmation
+  safety gate; write surface scans and write benchmarks behind the same gate
 - Local history in SQLite (benchmarks, scans, SMART snapshots), shared by
   CLI and GUI, with no raw serial numbers stored
 - `platter-cli` with JSON output and documented exit codes

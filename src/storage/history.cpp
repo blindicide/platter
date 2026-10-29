@@ -12,6 +12,7 @@
 
 #include "platter/core/sha256.hpp"
 #include "platter/reports/bench_report.hpp"
+#include "platter/reports/erase_report.hpp"
 #include "platter/reports/scan_report.hpp"
 
 namespace fs = std::filesystem;
@@ -23,6 +24,9 @@ std::string_view session_kind_name(SessionKind k) noexcept {
         case SessionKind::benchmark: return "benchmark";
         case SessionKind::surface_scan: return "surface-scan";
         case SessionKind::smart: return "smart";
+        case SessionKind::erase: return "erase";
+        case SessionKind::imaging: return "imaging";
+        case SessionKind::qualification: return "qualification";
     }
     return "?";
 }
@@ -284,8 +288,10 @@ Result<std::int64_t> HistoryStore::record_benchmark(const bench::BenchResult& r)
     };
     switch (r.config.kind) {
         case BenchKind::sequential:
+        case BenchKind::sequential_write:
         case BenchKind::block_sizes: primary = best([](const bench::Metrics& m) { return m.mb_per_s; }); break;
         case BenchKind::random:
+        case BenchKind::random_write:
         case BenchKind::queue_depths: primary = best([](const bench::Metrics& m) { return m.iops; }); break;
         case BenchKind::access_time:
             primary = r.phases.empty() ? 0 : r.phases.front().metrics.lat_mean_us / 1000.0;
@@ -328,6 +334,21 @@ Result<std::int64_t> HistoryStore::record_smart(const DeviceInfo& d, const smart
     return impl_->insert_session(SessionKind::smart, d, std::string(smart::health_name(a.status)), {},
                                  std::string(smart::health_name(a.status)), head,
                                  r.temperature_c ? static_cast<double>(*r.temperature_c) : 0.0, doc.dump());
+}
+
+Result<std::int64_t> HistoryStore::record_erase(const erase::EraseResult& r) {
+    const std::string head = std::string(erase::verdict_name(r.verdict)) + ", " + std::string(erase::method_label(r.config.method)) +
+                             ", " + format_capacity(r.affected_bytes);
+    return impl_->insert_session(SessionKind::erase, r.device, std::string(erase::method_name(r.config.method)),
+                                 r.started_utc, std::string(operation_state_name(r.state)), head,
+                                 static_cast<double>(r.passes.size()), reports::erase_to_json(r));
+}
+
+Result<std::int64_t> HistoryStore::record_document(SessionKind kind, const DeviceInfo& d, const std::string& subtype,
+                                                   const std::string& started_utc, const std::string& state,
+                                                   const std::string& headline, double primary_value,
+                                                   const std::string& json_document) {
+    return impl_->insert_session(kind, d, subtype, started_utc, state, headline, primary_value, json_document);
 }
 
 Result<std::vector<SessionSummary>> HistoryStore::list(SessionKind kind, const std::string& device_key, int limit) {
@@ -381,6 +402,14 @@ Result<surface::ScanSnapshot> HistoryStore::load_scan(std::int64_t id) {
 }
 
 Result<std::string> HistoryStore::load_smart_json(std::int64_t id) { return impl_->document(SessionKind::smart, id); }
+
+Result<erase::EraseResult> HistoryStore::load_erase(std::int64_t id) {
+    auto doc = impl_->document(SessionKind::erase, id);
+    if (!doc) return doc.error();
+    return reports::erase_from_json(*doc);
+}
+
+Result<std::string> HistoryStore::load_document(SessionKind kind, std::int64_t id) { return impl_->document(kind, id); }
 
 Status HistoryStore::remove(SessionKind kind, std::int64_t id) {
     Stmt st(impl_->db, "DELETE FROM sessions WHERE id = ?1 AND kind = ?2");

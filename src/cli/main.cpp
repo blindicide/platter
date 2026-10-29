@@ -33,70 +33,21 @@
 #include "platter/smart/smart.hpp"
 #include "platter/surface/surface_scan.hpp"
 #include "platter/version.hpp"
+#include "commands.hpp"
+#include "common.hpp"
 #include "table.hpp"
 
 namespace fs = std::filesystem;
 using nlohmann::json;
 using namespace platter;
+using namespace platter::cli;
 using platter::cli::TextTable;
 
 namespace {
 
-// ------------------------------------------------------------- exit codes
-// Keep in sync with docs/cli-reference.md.
-enum Exit : int {
-    kOk = 0,
-    kFailure = 1,
-    kUsage = 2,
-    kNotFound = 3,
-    kPermission = 4,
-    kBusy = 5,
-    kIoError = 6,
-    kUnsupported = 7,
-    kToolMissing = 8,
-    kScanErrors = 9,
-    kHealthWarning = 10,
-    kHealthCritical = 11,
-    kHealthUnknown = 12,
-    kCancelled = 13,
-};
-
-int exit_for(const Error& e) {
-    switch (e.code) {
-        case Errc::not_found: return kNotFound;
-        case Errc::permission_denied: return kPermission;
-        case Errc::device_busy: return kBusy;
-        case Errc::io_error:
-        case Errc::short_transfer:
-        case Errc::timeout:
-        case Errc::device_removed: return kIoError;
-        case Errc::unsupported: return kUnsupported;
-        case Errc::external_tool_failed: return kToolMissing;
-        case Errc::invalid_argument:
-        case Errc::out_of_range:
-        case Errc::misaligned: return kUsage;
-        default: return kFailure;
-    }
-}
-
-// ------------------------------------------------------------- options
-
-struct Options {
-    bool json = false;
-    bool verbose = false;
-    bool quiet = false;
-    bool show_serial = false;
-    std::string output;
-    std::uint32_t sector_size = 512;
-    std::string smart_type;  // -d for smartctl
-    std::map<std::string, std::string> values;  // command-specific --key VALUE options
-    std::set<std::string> flags;                // command-specific --flag options
-    std::vector<std::string> positional;
-};
-
 constexpr const char* kUsageText = R"(usage: platter-cli [options] <command> [arguments]
 
-Commands (all read-only):
+Read-only commands:
   devices list                  List storage devices
   devices info <device>         Show identification and capabilities
   smart show <device>           SMART / NVMe health via smartctl
@@ -106,6 +57,12 @@ Commands (all read-only):
   benchmark history [<device>]  List saved benchmark sessions
   benchmark show <id>           Show a saved benchmark session
   version                       Print version
+
+Destructive commands (preview first; typed confirmation required):
+  erase run <device>            Overwrite erase with verification
+  erase methods                 List erase methods
+  erase history                 Saved erase reports
+  erase show <id>               Show a saved erase report
 
 <device> is a device path (/dev/sda, \\.\PhysicalDrive1), a short name
 (sda, nvme0n1, pd1), or a raw image file (*.img).
@@ -132,6 +89,10 @@ Surface scan options:
   --stop-after N        Stop after N unreadable blocks (default: never)
   --thresholds A,B,C,D  Latency class bounds in ms (default 5,20,50,200)
   --buffered            Use the OS cache instead of direct I/O
+  --mode M              read (default) | write | write-readback | pattern
+                        (all but read DESTROY data in the range (default: all); they need a
+                        typed confirmation, take --start/--end and honour --dry-run)
+  --pattern HEX         Byte pattern for the write modes (required for 'pattern')
   --csv FILE            Also write per-block CSV
   --report FILE         Also write a human-readable text report
   --map                 Print an ASCII latency map at the end
@@ -139,6 +100,8 @@ Surface scan options:
 
 Benchmark options:
   --test T              seq | random | access | curve | sizes | qd (default seq)
+                        write-seq | write-random DESTROY data: they need --start and
+                        --end, a typed confirmation, and honour --dry-run
   --block-size SIZE     Request size (defaults: seq/curve 1M, random/qd 4K,
                         access 1 sector)
   --qd N                Queue depth 1-64 (threads, each with its own handle)
@@ -153,6 +116,18 @@ Benchmark options:
   --chart               Append an ASCII chart
   --report FILE         Also write a text report
 
+Erase options (erase run):
+  --method M            zero | one | random | random-n | dod3 | dod7 | pattern | discard (default zero)
+  --passes N            Passes for random-n (1-99)
+  --pattern HEX         Byte pattern for --method pattern, e.g. DEADBEEF
+  --verify V            none | last | every (default last)
+  --range F:C[,F:C]     LBA range(s) as FIRST:COUNT instead of the whole device
+  --start/--end LBA     One inclusive LBA range instead of the whole device
+  --block-size SIZE     Bytes per request (default 1M)
+  --confirm TEXT        The typed confirmation (model name, last 4 of serial, or image file name)
+  --dry-run             Show the preview and stop; nothing is written
+  --report FILE         Also write the text report
+
 History (SQLite; off unless asked):
   --save                Record this benchmark / scan / SMART query in history
   --history-db FILE     History database (default: per-user data directory)
@@ -161,8 +136,19 @@ History (SQLite; off unless asked):
 Exit codes: 0 ok, 1 failure, 2 usage, 3 not found, 4 permission denied,
 5 busy, 6 I/O error, 7 unsupported, 8 smartctl missing/failed,
 9 scan / benchmark found unreadable blocks, 10/11/12 health WARNING/CRITICAL/UNKNOWN
-(smart show), 13 cancelled (Ctrl+C).
+(smart show), 13 cancelled (Ctrl+C), 14 refused by a safety check, 15 destructive operation
+finished with failed sectors.
 )";
+
+// Command-specific options. `--key VALUE` options land in Options::values,
+// bare `--flag` options in Options::flags (both without the leading dashes).
+const std::set<std::string> kValueOptions = {
+    "--start", "--end", "--block-size", "--order", "--sample", "--seed", "--retries", "--stop-after",
+    "--thresholds", "--csv", "--report", "--test", "--qd", "--duration", "--size", "--points", "--point-size",
+    "--sizes", "--qds", "--history-db", "--limit",
+    // destructive commands
+    "--method", "--passes", "--pattern", "--verify", "--confirm", "--range", "--label", "--mode"};
+const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run"};
 
 std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
     Options o;
@@ -207,15 +193,11 @@ std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
                 return std::nullopt;
             }
             o.sector_size = static_cast<std::uint32_t>(std::stoul(*v));
-        } else if (a == "--start" || a == "--end" || a == "--block-size" || a == "--order" || a == "--sample" ||
-                   a == "--seed" || a == "--retries" || a == "--stop-after" || a == "--thresholds" ||
-                   a == "--csv" || a == "--report" || a == "--test" || a == "--qd" || a == "--duration" ||
-                   a == "--size" || a == "--points" || a == "--point-size" || a == "--sizes" || a == "--qds" ||
-                   a == "--history-db" || a == "--limit") {
+        } else if (kValueOptions.count(a)) {
             auto v = need(a.c_str());
             if (!v) { exit_code = kUsage; return std::nullopt; }
             o.values[a.substr(2)] = *v;
-        } else if (a == "--buffered" || a == "--map" || a == "--save" || a == "--chart") {
+        } else if (kFlagOptions.count(a)) {
             o.flags.insert(a.substr(2));
         } else if (a.size() > 1 && a[0] == '-') {
             std::cerr << "platter-cli: unknown option '" << a << "'\n";
@@ -228,97 +210,6 @@ std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
     return o;
 }
 
-// ------------------------------------------------------------- output
-
-class Out {
-public:
-    explicit Out(const Options& o) : opts_(o) {}
-
-    std::ostream& text() { return buf_; }
-    void set_json(json j) { json_ = std::move(j); }
-    // Pre-serialized JSON written verbatim (canonical files such as scan exports).
-    void set_raw_json(std::string s) { raw_json_ = std::move(s); }
-
-    int flush(int code) {
-        std::string payload = opts_.json ? (raw_json_.empty() ? json_.dump(2) : raw_json_) + "\n" : buf_.str();
-        if (opts_.quiet && !opts_.json && opts_.output.empty()) return code;
-        if (!opts_.output.empty()) {
-            std::ofstream f(opts_.output, std::ios::binary | std::ios::trunc);
-            if (!f) {
-                std::cerr << "platter-cli: cannot write " << opts_.output << "\n";
-                return kFailure;
-            }
-            f << payload;
-        } else {
-            std::cout << payload;
-        }
-        return code;
-    }
-
-private:
-    const Options& opts_;
-    std::ostringstream buf_;
-    json json_;
-    std::string raw_json_;
-};
-
-int fail(const Error& e, const std::string& context = {}) {
-    std::cerr << "platter-cli: " << (context.empty() ? "" : context + ": ") << e.describe() << "\n";
-    if (e.code == Errc::permission_denied) {
-#ifdef _WIN32
-        std::cerr << "hint: raw device access needs an elevated (Administrator) prompt\n";
-#else
-        std::cerr << "hint: raw device access usually needs root (sudo) or membership in the 'disk' group\n";
-#endif
-    }
-    return exit_for(e);
-}
-
-// ------------------------------------------------------------- targets
-
-std::string expand_device(const std::string& arg) {
-#ifdef _WIN32
-    auto digits = [](const std::string& s) {
-        return !s.empty() && s.size() <= 3 && s.find_first_not_of("0123456789") == std::string::npos;
-    };
-    if (digits(arg)) return "\\\\.\\PhysicalDrive" + arg;
-    if (arg.size() > 2 && (arg.rfind("pd", 0) == 0 || arg.rfind("PD", 0) == 0) && digits(arg.substr(2)))
-        return "\\\\.\\PhysicalDrive" + arg.substr(2);
-    return arg;
-#else
-    if (arg.find('/') == std::string::npos) return "/dev/" + arg;
-    return arg;
-#endif
-}
-
-bool is_image_path(const std::string& arg) {
-    std::error_code ec;
-    return fs::is_regular_file(arg, ec);
-}
-
-Result<DeviceInfo> describe_target(const std::string& arg, const Options& o) {
-    if (is_image_path(arg)) {
-        auto dev = open_image(arg, {}, o.sector_size);
-        if (!dev) return dev.error();
-        return (*dev)->info();
-    }
-    return describe_device(expand_device(arg));
-}
-
-Result<BlockDevicePtr> open_target_read_only(const std::string& arg, const Options& o) {
-    OpenOptions oo;
-    oo.mode = OpenMode::read_only;  // v0.1: never anything else
-    if (is_image_path(arg)) return open_image(arg, oo, o.sector_size);
-    return open_device(expand_device(arg), oo);
-}
-
-std::string yes_no(Tri t) { return std::string(tri_name(t)); }
-
-std::string short_capacity(std::uint64_t bytes) {
-    auto s = format_capacity(bytes);
-    auto p = s.find(" (");
-    return p == std::string::npos ? s : s.substr(0, p);
-}
 
 // ------------------------------------------------------------- commands
 
@@ -453,27 +344,6 @@ int cmd_partitions_list(const Options& o, const std::string& target) {
     return out.flush(kOk);
 }
 
-// ------------------------------------------------------------- history
-
-std::string history_path(const Options& o) {
-    auto it = o.values.find("history-db");
-    return it != o.values.end() ? it->second : storage::HistoryStore::default_path();
-}
-
-// Opens the history DB and runs `fn`; reports problems as warnings so a
-// failed save never hides the measurement that was just made.
-template <typename Fn>
-void save_to_history(const Options& o, Fn&& fn) {
-    const auto path = history_path(o);
-    auto store = storage::HistoryStore::open(path);
-    if (!store) {
-        std::cerr << "warning: not saved to history (" << store.error().describe() << ")\n";
-        return;
-    }
-    auto id = fn(**store);
-    if (!id) std::cerr << "warning: not saved to history (" << id.error().describe() << ")\n";
-    else if (!o.quiet) std::cerr << "Saved to history as #" << *id << " (" << path << ")\n";
-}
 
 int cmd_smart_show(const Options& o, const std::string& target) {
     Out out(o);
@@ -557,44 +427,6 @@ int cmd_smart_show(const Options& o, const std::string& target) {
     }
 }
 
-// ------------------------------------------------------------- surface scan
-
-std::atomic<bool> g_interrupted{false};
-extern "C" void on_sigint(int) { g_interrupted.store(true); }
-
-std::optional<std::uint64_t> parse_u64(const std::string& s) {
-    if (s.empty() || s.find_first_not_of("0123456789") != std::string::npos || s.size() > 20) return std::nullopt;
-    try {
-        return std::stoull(s);
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-// "4096", "64K", "1M", "16MiB", "4G" -> bytes (binary multiples)
-std::optional<std::uint64_t> parse_size(std::string s) {
-    std::uint64_t mult = 1;
-    for (auto* suf : {"KiB", "MiB", "GiB", "K", "M", "G", "k", "m", "g"}) {
-        const std::string sf = suf;
-        if (s.size() > sf.size() && s.compare(s.size() - sf.size(), sf.size(), sf) == 0) {
-            const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(sf[0])));
-            mult = u == 'K' ? 1024ull : u == 'M' ? 1024ull * 1024 : 1024ull * 1024 * 1024;
-            s.resize(s.size() - sf.size());
-            break;
-        }
-    }
-    auto v = parse_u64(s);
-    if (!v || *v > (UINT64_MAX / mult)) return std::nullopt;
-    return *v * mult;
-}
-
-std::string hms(std::chrono::seconds s) {
-    char b[32];
-    const auto t = s.count();
-    std::snprintf(b, sizeof b, "%02lld:%02lld:%02lld", static_cast<long long>(t / 3600),
-                  static_cast<long long>(t / 60 % 60), static_cast<long long>(t % 60));
-    return b;
-}
 
 void print_ascii_map(std::ostream& os, const surface::ScanSnapshot& snap) {
     using surface::LatencyClass;
@@ -689,17 +521,48 @@ int cmd_surface_scan(const Options& o, const std::string& target) {
         if (i != 4) return bad("--thresholds takes exactly four values");
     }
     c.direct_io = !o.flags.count("buffered");
+    if (auto v = get("mode")) {
+        if (*v == "read") c.mode = ScanMode::read;
+        else if (*v == "write") c.mode = ScanMode::write;
+        else if (*v == "write-readback") c.mode = ScanMode::write_readback;
+        else if (*v == "pattern") c.mode = ScanMode::custom_pattern;
+        else return bad("--mode must be read, write, write-readback or pattern");
+    }
+    if (auto v = get("pattern")) {
+        auto bytes = parse_hex_pattern(*v);
+        if (!bytes) return bad(bytes.error().message);
+        c.pattern = std::move(*bytes);
+        if (!is_write_mode(c.mode)) return bad("--pattern only applies to --mode write, write-readback or pattern");
+    }
 
     const bool image = is_image_path(target);
-    const std::string path = image ? target : expand_device(target);
-    auto created = create_scan(path, image, c, o.sector_size);
-    if (!created) return fail(created.error(), path);
-    auto& scan = *created;
+    std::string path = image ? target : expand_device(target);
+    std::unique_ptr<SurfaceScan> scan;
+    if (is_write_mode(c.mode)) {
+        // DESTRUCTIVE: goes through the safety pipeline like erase does.
+        if (c.mode == ScanMode::custom_pattern && c.pattern.empty()) return bad("--mode pattern needs --pattern HEX");
+        auto ranges = parse_target_ranges(o);
+        if (!ranges) return bad(ranges.error().message);
+        if (ranges->size() > 1) return bad("write scans take one range (--start/--end)");
+        if (!ranges->empty()) {
+            c.start_lba = ranges->front().first;
+            c.end_lba = ranges->front().first + ranges->front().count - 1;
+        }
+        int code = kOk;
+        auto auth = authorize_from_cli(o, target, safety::Kind::write_test,
+                                       std::string(scan_mode_name(c.mode)) + " surface scan", *ranges, "a write scan", code);
+        if (!auth) return code;
+        scan = std::make_unique<SurfaceScan>(std::move(*auth), c);
+    } else {
+        auto created = create_scan(path, image, c, o.sector_size);
+        if (!created) return fail(created.error(), path);
+        scan = std::move(*created);
+    }
     if (auto v = scan->validate(); !v) return fail(v.error(), "invalid scan configuration");
 
     const auto& L = scan->layout();
     if (!o.quiet) {
-        std::cerr << "Scanning " << path << " (read-only): LBA " << L.start_lba << " - " << L.end_lba << ", "
+        std::cerr << (is_write_mode(c.mode) ? "WRITE-scanning " : "Scanning ") << path << (is_write_mode(c.mode) ? ": LBA " : " (read-only): LBA ") << L.start_lba << " - " << L.end_lba << ", "
                   << L.block_count << " blocks of " << scan->config().block_bytes << " bytes, "
                   << scan_order_name(scan->config().order) << ", "
                   << (scan->config().direct_io ? "direct I/O" : "buffered I/O") << ". Ctrl+C to stop.\n";
@@ -771,8 +634,6 @@ int cmd_surface_scan(const Options& o, const std::string& target) {
     code = out.flush(code);
     return files_ok ? code : kFailure;
 }
-
-int usage_error(const std::string& msg);
 
 // ------------------------------------------------------------- benchmark
 
@@ -866,14 +727,15 @@ int cmd_benchmark_read(const Options& o, const std::string& target) {
         static const std::pair<const char*, BenchKind> kinds[] = {
             {"seq", BenchKind::sequential},     {"sequential", BenchKind::sequential}, {"random", BenchKind::random},
             {"access", BenchKind::access_time}, {"curve", BenchKind::speed_curve},     {"sizes", BenchKind::block_sizes},
-            {"qd", BenchKind::queue_depths}};
+            {"qd", BenchKind::queue_depths},    {"write-seq", BenchKind::sequential_write},
+            {"write-random", BenchKind::random_write}};
         bool found = false;
         for (const auto& [n, k] : kinds)
             if (*v == n) {
                 c.kind = k;
                 found = true;
             }
-        if (!found) return bad("--test must be seq, random, access, curve, sizes or qd");
+        if (!found) return bad("--test must be seq, random, access, curve, sizes, qd, write-seq or write-random");
     }
     if (auto v = get("block-size")) {
         auto n = parse_size(*v);
@@ -937,13 +799,27 @@ int cmd_benchmark_read(const Options& o, const std::string& target) {
 
     const bool image = is_image_path(target);
     const std::string path = image ? target : expand_device(target);
-    auto created = create_benchmark(path, image, c, o.sector_size);
-    if (!created) return fail(created.error(), path);
-    auto& b = *created;
+    std::unique_ptr<Benchmark> b;
+    const bool destructive = is_write_kind(c.kind);
+    if (destructive) {
+        // DESTRUCTIVE: the region is explicit and goes through the safety pipeline.
+        if (!get("start") || !get("end")) return bad("write benchmarks need an explicit region: --start LBA --end LBA");
+        auto ranges = parse_target_ranges(o);
+        if (!ranges) return bad(ranges.error().message);
+        int code = kOk;
+        auto auth = authorize_from_cli(o, target, safety::Kind::write_test, std::string(bench_kind_title(c.kind)) + " benchmark",
+                                       *ranges, "a write benchmark", code);
+        if (!auth) return code;
+        b = std::make_unique<Benchmark>(std::move(*auth), c);
+    } else {
+        auto created = create_benchmark(path, image, c, o.sector_size);
+        if (!created) return fail(created.error(), path);
+        b = std::move(*created);
+    }
     if (auto v = b->validate(); !v) return fail(v.error(), "invalid benchmark configuration");
     const auto& ec = b->config();
     if (!o.quiet)
-        std::cerr << bench_kind_title(ec.kind) << " on " << path << " (read-only), block " << ec.block_bytes
+        std::cerr << bench_kind_title(ec.kind) << " on " << path << (destructive ? " (WRITING)" : " (read-only)") << ", block " << ec.block_bytes
                   << " bytes, QD " << ec.queue_depth << ", " << (ec.direct_io ? "direct" : "buffered")
                   << " I/O. Ctrl+C to stop.\n";
 
@@ -1059,11 +935,6 @@ int cmd_benchmark_show(const Options& o, const std::string& id_text) {
     return out.flush(kOk);
 }
 
-int usage_error(const std::string& msg) {
-    std::cerr << "platter-cli: " << msg << "\nTry 'platter-cli --help'.\n";
-    return kUsage;
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1109,6 +980,19 @@ int main(int argc, char** argv) {
             return cmd_benchmark_show(*opts, *arg(2));
         }
         return usage_error("usage: benchmark read <device> | benchmark history [<device>] | benchmark show <id>");
+    }
+    if (cmd == "erase") {
+        if (arg(1) && *arg(1) == "run") {
+            if (!arg(2)) return usage_error("erase run needs a <device>");
+            return cmd_erase_run(*opts, *arg(2));
+        }
+        if (arg(1) && *arg(1) == "methods") return cmd_erase_methods(*opts);
+        if (arg(1) && *arg(1) == "history") return cmd_erase_history(*opts);
+        if (arg(1) && *arg(1) == "show") {
+            if (!arg(2)) return usage_error("erase show needs a session id");
+            return cmd_erase_show(*opts, *arg(2));
+        }
+        return usage_error("usage: erase run <device> | erase methods | erase history | erase show <id>");
     }
     if (cmd == "smart") {
         if (!arg(1) || *arg(1) != "show") return usage_error("usage: smart show <device>");

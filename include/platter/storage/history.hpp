@@ -15,12 +15,13 @@
 
 #include "platter/benchmark/benchmark.hpp"
 #include "platter/core/error.hpp"
+#include "platter/erase/erase.hpp"
 #include "platter/smart/smart.hpp"
 #include "platter/surface/surface_scan.hpp"
 
 namespace platter::storage {
 
-enum class SessionKind : std::uint8_t { benchmark, surface_scan, smart };
+enum class SessionKind : std::uint8_t { benchmark, surface_scan, smart, erase, imaging, qualification };
 std::string_view session_kind_name(SessionKind k) noexcept;
 
 struct SessionSummary {
@@ -65,6 +66,14 @@ public:
     Result<std::int64_t> record_benchmark(const bench::BenchResult& r);
     Result<std::int64_t> record_scan(const surface::ScanSnapshot& s);
     Result<std::int64_t> record_smart(const DeviceInfo& d, const smart::Report& r, const smart::Assessment& a);
+    Result<std::int64_t> record_erase(const erase::EraseResult& r);
+    // Generic path for sessions whose typed loader lives elsewhere (imaging,
+    // qualification): the JSON document is stored verbatim, so callers must
+    // already have removed serial numbers from it.
+    Result<std::int64_t> record_document(SessionKind kind, const DeviceInfo& d, const std::string& subtype,
+                                         const std::string& started_utc, const std::string& state,
+                                         const std::string& headline, double primary_value,
+                                         const std::string& json_document);
 
     // Newest first. Empty device_key = all devices.
     Result<std::vector<SessionSummary>> list(SessionKind kind, const std::string& device_key = {}, int limit = 200);
@@ -73,6 +82,8 @@ public:
     Result<bench::BenchResult> load_benchmark(std::int64_t id);
     Result<surface::ScanSnapshot> load_scan(std::int64_t id);
     Result<std::string> load_smart_json(std::int64_t id);
+    Result<erase::EraseResult> load_erase(std::int64_t id);
+    Result<std::string> load_document(SessionKind kind, std::int64_t id);
 
     Status remove(SessionKind kind, std::int64_t id);
 

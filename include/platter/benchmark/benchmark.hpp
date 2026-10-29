@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: TBD
 //
-// Read benchmarks (spec §7.1, §7.3, §7.4). Write benchmarks (§7.2) are not
-// part of this module yet: they need the destructive-operation pipeline.
+// Read benchmarks (spec §7.1, §7.3, §7.4) and write benchmarks (§7.2).
+// Write benchmarks destroy data in their region: they only run on a
+// safety::AuthorizedTarget (docs/safety.md), with queue depth 1..N threads
+// sharing that one exclusive handle.
 //
 // Measurement model
 // -----------------
@@ -26,6 +28,7 @@
 #include "platter/core/block_device.hpp"
 #include "platter/core/histogram.hpp"
 #include "platter/core/operation.hpp"
+#include "platter/core/safety.hpp"
 
 namespace platter::bench {
 
@@ -36,8 +39,13 @@ enum class BenchKind : std::uint8_t {
     speed_curve,   // throughput sampled at evenly spaced positions (HD Tune style)
     block_sizes,   // sequential read at several block sizes
     queue_depths,  // random read at several queue depths
+    sequential_write,  // DESTRUCTIVE: sequential write throughput
+    random_write,      // DESTRUCTIVE: random write IOPS / latency
 };
-inline constexpr int kBenchKindCount = 6;
+inline constexpr int kBenchKindCount = 8;
+constexpr bool is_write_kind(BenchKind k) noexcept {
+    return k == BenchKind::sequential_write || k == BenchKind::random_write;
+}
 std::string_view bench_kind_name(BenchKind k) noexcept;   // "sequential", ...
 std::string_view bench_kind_title(BenchKind k) noexcept;  // "Sequential read", ...
 
@@ -114,6 +122,9 @@ class Benchmark final : public Operation {
 public:
     // `opener` is called once per worker thread; every handle must be read-only.
     Benchmark(DeviceOpener opener, BenchConfig config, std::string device_id, bool is_image);
+    // Write benchmark: takes over an authorization (kind write_test). The
+    // tested region must lie inside the confirmed ranges.
+    Benchmark(safety::AuthorizedTarget target, BenchConfig config);
     ~Benchmark() override;
 
     bool supports_pause() const noexcept override { return false; }
@@ -141,6 +152,7 @@ private:
         std::uint64_t max_bytes;   // 0 = unlimited
         double max_seconds;        // 0 = unlimited
         bool record_positions;
+        bool write = false;
     };
     // Runs one measured phase. With `single_point` (speed curve) the result is
     // reported as a position sample instead of a Phase; `out` receives the
@@ -148,6 +160,7 @@ private:
     Status run_phase(const PhaseSpec& spec, OperationControl& control, PositionPoint* single_point, Metrics* out);
 
     DeviceOpener opener_;
+    std::unique_ptr<safety::AuthorizedTarget> auth_;  // write benchmarks only
     BenchConfig cfg_;
     bool is_image_;
     DeviceInfo info_;

@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <optional>
+#include <vector>
 
 #include "platter/core/range.hpp"
 #include "../file_device.hpp"
@@ -82,10 +84,70 @@ namespace {
 
 using win32::Handle;
 
+#ifndef FSCTL_ALLOW_EXTENDED_DASD_IO
+#define FSCTL_ALLOW_EXTENDED_DASD_IO CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 32, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+
+// "\\.\PhysicalDrive3" -> 3
+std::optional<DWORD> physical_drive_number(const std::string& path) {
+    static const std::string kPrefix = "\\\\.\\PhysicalDrive";
+    if (path.size() <= kPrefix.size() || path.compare(0, kPrefix.size(), kPrefix) != 0) return std::nullopt;
+    DWORD n = 0;
+    for (std::size_t i = kPrefix.size(); i < path.size(); ++i) {
+        if (path[i] < '0' || path[i] > '9' || n > 100000) return std::nullopt;
+        n = n * 10 + static_cast<DWORD>(path[i] - '0');
+    }
+    return n;
+}
+
+// Locks and dismounts every volume that has an extent on `disk`, returning the
+// handles: the locks last exactly as long as the handles stay open. Any volume
+// that cannot be locked (in use) aborts the whole open: never write underneath
+// a mounted filesystem.
+Result<std::vector<Handle>> lock_volumes_of_disk(DWORD disk) {
+    std::vector<Handle> locked;
+    wchar_t name[MAX_PATH + 1] = {};
+    HANDLE find = FindFirstVolumeW(name, MAX_PATH);
+    if (find == INVALID_HANDLE_VALUE) return locked;  // no volumes at all
+    struct FindGuard {
+        HANDLE h;
+        ~FindGuard() { FindVolumeClose(h); }
+    } guard{find};
+    do {
+        std::wstring vol = name;
+        while (!vol.empty() && vol.back() == L'\\') vol.pop_back();  // CreateFile wants no trailing backslash
+        Handle h(CreateFileW(vol.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                             OPEN_EXISTING, 0, nullptr));
+        if (!h.valid()) continue;  // CD-ROM, network etc.: not ours
+        alignas(VOLUME_DISK_EXTENTS) char buf[1024];
+        DWORD ret = 0;
+        if (!DeviceIoControl(h.get(), IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, nullptr, 0, buf, sizeof buf, &ret, nullptr))
+            continue;  // not a disk volume
+        const auto* ext = reinterpret_cast<const VOLUME_DISK_EXTENTS*>(buf);
+        bool ours = false;
+        for (DWORD i = 0; i < ext->NumberOfDiskExtents; ++i)
+            if (ext->Extents[i].DiskNumber == disk) ours = true;
+        if (!ours) continue;
+        if (!DeviceIoControl(h.get(), FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr)) {
+            auto e = win32::last_error("cannot lock volume " + win32::narrow(vol) + " (in use by another program)");
+            e.code = Errc::device_busy;
+            return e;
+        }
+        if (!DeviceIoControl(h.get(), FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr))
+            return win32::last_error("cannot dismount volume " + win32::narrow(vol));
+        locked.push_back(std::move(h));
+    } while (FindNextVolumeW(find, name, MAX_PATH));
+    return locked;
+}
+
 class Win32FileDevice final : public IBlockDevice {
 public:
-    Win32FileDevice(Handle h, DeviceInfo info, OpenMode mode, std::uint32_t alignment)
-        : h_(std::move(h)), info_(std::move(info)), mode_(mode), alignment_(alignment) {}
+    Win32FileDevice(Handle h, DeviceInfo info, OpenMode mode, std::uint32_t alignment, std::vector<Handle> volume_locks = {})
+        : h_(std::move(h)),
+          volume_locks_(std::move(volume_locks)),
+          info_(std::move(info)),
+          mode_(mode),
+          alignment_(alignment) {}
 
     const DeviceInfo& info() const noexcept override { return info_; }
     OpenMode mode() const noexcept override { return mode_; }
@@ -142,6 +204,7 @@ private:
     }
 
     Handle h_;
+    std::vector<Handle> volume_locks_;  // closed after h_: locks outlive all writes
     DeviceInfo info_;
     OpenMode mode_;
     std::uint32_t alignment_;
@@ -154,9 +217,18 @@ Result<BlockDevicePtr> open_file_device(const std::string& path, const OpenOptio
     const DWORD access = GENERIC_READ | (opts.mode == OpenMode::read_write ? GENERIC_WRITE : 0);
     // Physical disks must be shared or Windows refuses the open while volumes
     // are mounted; exclusivity on disks comes from FSCTL_LOCK_VOLUME on each
-    // volume (destructive pipeline, v0.4+). Images can be opened exclusively.
+    // volume (see lock_volumes_of_disk). Images can be opened exclusively.
     DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE;
     if (opts.exclusive && is_image) share = 0;
+    // Writing to a physical disk: take every volume on it first.
+    std::vector<Handle> volume_locks;
+    if (opts.exclusive && opts.mode == OpenMode::read_write && !is_image) {
+        const auto disk = physical_drive_number(path);
+        if (!disk) return Error{Errc::invalid_argument, "exclusive write access needs a \\\\.\\PhysicalDriveN path, got " + path};
+        auto locks = lock_volumes_of_disk(*disk);
+        if (!locks) return locks.error();
+        volume_locks = std::move(locks).value();
+    }
     DWORD flags = FILE_ATTRIBUTE_NORMAL;
     if (opts.direct_io) flags |= FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH;
 
@@ -180,8 +252,13 @@ Result<BlockDevicePtr> open_file_device(const std::string& path, const OpenOptio
             return win32::last_error("IOCTL_DISK_GET_LENGTH_INFO");
     }
 
+    if (!volume_locks.empty() || (opts.exclusive && opts.mode == OpenMode::read_write && !is_image)) {
+        // Volumes are locked and dismounted; let raw writes reach their extents.
+        DWORD ret = 0;
+        DeviceIoControl(h.get(), FSCTL_ALLOW_EXTENDED_DASD_IO, nullptr, 0, nullptr, 0, &ret, nullptr);
+    }
     const std::uint32_t alignment = opts.direct_io ? info.logical_sector_size : 1;
-    return BlockDevicePtr(new Win32FileDevice(std::move(h), std::move(info), opts.mode, alignment));
+    return BlockDevicePtr(new Win32FileDevice(std::move(h), std::move(info), opts.mode, alignment, std::move(volume_locks)));
 }
 
 }  // namespace platter::detail

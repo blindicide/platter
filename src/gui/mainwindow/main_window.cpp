@@ -403,14 +403,6 @@ void MainWindow::buildCentral() {
     addKeyedTab(tabs_, smart_tab_, QStringLiteral("SMART"), tr("SMART"));
     surface_tab_ = new SurfaceTab(tabs_);
     addKeyedTab(tabs_, surface_tab_, QStringLiteral("SURFACE"), tr("SURFACE"));
-    const auto sync_targets = [this] {
-        surface_tab_->setDevice(current());
-        bench_tab_->setDevice(current());
-        erase_tab_->setDevice(current());
-    };
-    connect(surface_tab_, &SurfaceTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
-    connect(bench_tab_, &BenchmarkTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
-    connect(erase_tab_, &EraseTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
     connect(surface_tab_, &SurfaceTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     bench_tab_ = new BenchmarkTab(tabs_);
@@ -422,6 +414,14 @@ void MainWindow::buildCentral() {
     addKeyedTab(tabs_, erase_tab_, QStringLiteral("ERASE"), tr("ERASE"));
     connect(erase_tab_, &EraseTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
+    const auto sync_targets = [this] {
+        surface_tab_->setDevice(current());
+        bench_tab_->setDevice(current());
+        erase_tab_->setDevice(current());
+    };
+    connect(surface_tab_, &SurfaceTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
+    connect(bench_tab_, &BenchmarkTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
+    connect(erase_tab_, &EraseTab::operationFinished, this, sync_targets, Qt::QueuedConnection);
     qualify_tab_ = new QualifyTab(tabs_);
     addKeyedTab(tabs_, qualify_tab_, QStringLiteral("QUALIFY"), tr("QUALIFY"));
     connect(qualify_tab_, &QualifyTab::logEvent, this,

@@ -59,6 +59,7 @@ enum Exit : int {
     kCancelled = 13,
     kRefused = 14,          // a safety check refused a destructive request
     kCompletedWithErrors = 15,  // destructive operation finished but some sectors failed
+    kVerifyFailed = 16,         // a checksum or read-back comparison did not match
 };
 
 inline int exit_for(const Error& e) {

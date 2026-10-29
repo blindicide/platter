@@ -26,4 +26,12 @@ int cmd_partitions_resize(const Options& o, const std::string& target, const std
 // cmd_format.cpp
 int cmd_format(const Options& o, const std::string& target);
 
+// cmd_imaging.cpp
+int cmd_image_create(const Options& o, const std::string& device, const std::string& file);
+int cmd_image_restore(const Options& o, const std::string& file, const std::string& device);
+int cmd_image_verify(const Options& o, const std::string& file);
+int cmd_image_history(const Options& o);
+int cmd_image_show(const Options& o, const std::string& id_text);
+int cmd_clone(const Options& o, const std::string& source, const std::string& target);
+
 }  // namespace platter::cli

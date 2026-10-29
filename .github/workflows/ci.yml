@@ -26,7 +26,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            ninja-build qt6-base-dev nlohmann-json3-dev catch2 fdisk fonts-liberation
+            ninja-build qt6-base-dev nlohmann-json3-dev catch2 fdisk fonts-liberation libzstd-dev zstd
 
       - name: Configure
         run: scripts/ci-run.sh "Linux configure" cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPLATTER_WERROR=ON
@@ -46,6 +46,19 @@ jobs:
           ./build/src/platter-cli partitions list --json smoke.img > partitions.json
           set +e; ./build/src/platter-cli smart show smoke.img; rc=$?; set -e
           test "$rc" -eq 7   # SMART on an image must be "unsupported"
+
+      - name: CLI imaging smoke test (temp images only)
+        run: |
+          cli=./build/src/platter-cli
+          $cli image create smoke.img smoke.img.zst -q
+          test "$(cut -d' ' -f1 smoke.img.zst.sha256)" = "$(zstd -dc smoke.img.zst | sha256sum | cut -d' ' -f1)"
+          $cli image verify smoke.img.zst --against smoke.img -q
+          truncate -s 64M restored.img
+          $cli image restore smoke.img.zst restored.img --confirm restored.img -q
+          cmp smoke.img restored.img
+          truncate -s 64M cloned.img
+          $cli clone smoke.img cloned.img --confirm cloned.img -q
+          cmp smoke.img cloned.img
 
       - name: GUI smoke test (offscreen screenshot)
         env:

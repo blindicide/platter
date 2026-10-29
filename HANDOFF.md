@@ -36,12 +36,45 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.5 Partition editing + FAT32/exFAT format — feature-complete in code,
-never run on real hardware** (see "v0.5 so far"). Previously: **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.6 Imaging / cloning — feature-complete in code, never run on real hardware**
+(see "v0.6 so far"). Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.6 so far
+- **Image files** `include/platter/imaging/image_file.hpp`, `src/imaging/image_file.cpp`:
+  `ImageWriter` (raw, optional sparse; or ONE zstd frame with the content size and a
+  checksum recorded; writes `<out>.partial`, renames on `finish()`), `ImageReader` (auto
+  detects zstd by magic; `size()` known for raw and for zstd frames with a content size),
+  `.sha256` sidecar helpers. zstd is optional at build time (`PLATTER_HAVE_ZSTD`): system
+  library if found, otherwise FetchContent v1.5.6 (cmake/PlatterDependencies.cmake;
+  `-DPLATTER_FETCH_ZSTD=ON` forces it, `-DPLATTER_WITH_ZSTD=OFF` disables). Linux CI installs
+  `libzstd-dev zstd`.
+- **Operations** `include/platter/imaging/imaging.hpp`, `src/imaging/imaging.cpp`:
+  `CreateImage` (read-only source; `--recover` = per-sector retry, zero-fill, unreadable
+  ranges recorded; SHA-256 of the data; optional re-read of the finished image),
+  `RestoreImage` (AuthorizedTarget kind restore_image, single range = image sectors;
+  optional pre-check of `expect_sha256`; read-back by SHA-256 + per-block fingerprints to
+  locate mismatches), `CloneDevice` (read-only source + AuthorizedTarget kind clone_target,
+  same sector size required), `VerifyImage` (hash, expected checksum, optional sector
+  comparison against a device). Result type is `ImagingResult` with `Verdict` ok /
+  ok_with_unreadable / check_failed / incomplete (enum `JobKind`, not `Kind`: that name is
+  `safety::Kind`). Tests: `tests/unit/test_imaging.cpp` (fault injection with
+  `FaultyWriteDevice`).
+- **Reports/history**: `reports/imaging_report.*` (schema `imaging-report` v1, own SHA-256
+  digest), `HistoryStore::record_imaging/load_imaging` (SessionKind::imaging).
+- **CLI**: `src/cli/cmd_imaging.cpp` — `image create|restore|verify|history|show`, `clone`;
+  new exit code 16 (check failed). New options/flags listed in `kValueOptions` /
+  `kFlagOptions` in `src/cli/main.cpp`.
+- **GUI**: `src/gui/tabs/imaging_tab.{hpp,cpp}` — CLONE / IMAGE tab (create / restore /
+  clone / verify). Restore and clone go through `confirm_and_authorize`. Clone's target is
+  picked from the device list (`setChoices`).
+- Validated by hand: `zstd -dc` of a platter image gives the same SHA-256 as the sidecar;
+  restore/clone/verify round trips on temp images. NEVER run against real devices from here.
+- Not done: resumable copies / rescue log, multi-frame or seekable zstd, image mounting,
+  resizing of the target's partitions on clone-to-larger-disk.
 
 ### v0.5 so far
 - **Partition planning/editing** `include/platter/partitions/partition_edit.hpp`,
@@ -367,7 +400,7 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. v0.6 imaging/cloning,
+2. (v0.6 done)
    v0.7 hex inspector / qualification / history browser, v0.8 privilege
    separation, v0.9 settings and polish, v1.0 release prep (see sections below
    as they get filled in).

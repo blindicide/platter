@@ -101,6 +101,17 @@ disk (`FSCTL_LOCK_VOLUME`, `FSCTL_DISMOUNT_VOLUME`) and fails if one is busy.
 The GUI partition manager stages edits in memory and goes through the same
 typed-confirmation dialog as erase.
 
+## Imaging and cloning (v0.6)
+
+The *source* of an image or clone is only ever opened read-only (the operations reject a writable
+handle). Restore uses `Kind::restore_image` and clone `Kind::clone_target`, each confirmed for
+exactly one range: the sectors that will be written. `RestoreImage` and `CloneDevice` refuse any
+other kind or range count, and the `AuthorizedTarget` rejects writes outside that range.
+Both can verify by reading the target back; a mismatch is reported as `VERIFICATION FAILED`
+(exit 16) with the differing ranges. A recovery copy never hides lost data: unreadable sectors
+are zero-filled, counted, listed and flagged in the verdict. Image files are written to
+`<name>.partial` and renamed on success.
+
 ## Testing rules
 
 - Unit and integration tests use sparse image files in temp directories.

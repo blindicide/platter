@@ -27,6 +27,11 @@ platter-cli [options] <command> [arguments]
 | `partitions init <device> --table gpt\|mbr` | **Destructive.** Writes a new, empty partition table. | Yes |
 | `partitions add\|delete\|set\|resize <device> ...` | **Destructive.** Edits the existing table. See below. | Yes |
 | `format <device> --fs fat32\|exfat [--partition N]` | **Destructive.** Native quick format. See below. | Yes |
+| `image create <device> <file>` | Copies a device (or `--start/--end` range) to an image: raw, or one zstd frame for `*.zst` / `--compress zstd`. Records a SHA-256 of the data and writes `<file>.sha256`. Read-only on the source. See below. | Yes for physical devices |
+| `image verify <file>` | Re-hashes an image and compares it with `--sha256`, `<file>.sha256`, and (with `--against DEVICE`) the device itself. | No (Yes for physical devices with `--against`) |
+| `image restore <file> <device>` | **Destructive.** Writes an image onto a device. | Yes |
+| `clone <source> <target>` | **Destructive.** Copies one device onto another, sector for sector. | Yes |
+| `image history` / `image show <id>` | Saved imaging sessions and their reports. | No |
 | `benchmark history [<device>]` | Lists saved benchmark sessions (newest first), optionally for one device. | No |
 | `benchmark show <id>` | Re-prints a saved session (text, or JSON with `--json`; `--chart` works too). | No |
 | `smart show <device>` | Runs `smartctl --json=c -a` and prints attributes / NVMe health log plus a conservative assessment with every contributing observation. | Usually yes |
@@ -134,7 +139,8 @@ platter-cli benchmark show 12 --chart
 | 12 | `smart show`: health UNKNOWN |
 | 13 | Cancelled by the user (Ctrl+C); partial results are still reported |
 | 14 | Refused: blocked by the safety checks, no or wrong confirmation, or the device changed since the preview |
-| 15 | Erase completed with errors (sectors that could not be written or did not verify) |
+| 15 | Completed with errors: erase sectors that could not be written / verify, or imaging that replaced unreadable sectors by zeros |
+| 16 | A checksum or read-back comparison failed (`image verify`, `image restore`, `clone`) |
 
 ## smartctl
 
@@ -221,3 +227,44 @@ first if that matters). The boot sector is written last, a half-finished format
 is therefore not recognizable as a volume, and the metadata is read back and
 compared afterwards. FAT32 volumes need at least 65525 clusters (about 33 MiB
 with 512-byte clusters).
+
+### Imaging and cloning
+
+```sh
+platter-cli image create /dev/sdb backup.img.zst --save          # zstd, verified, backup.img.zst.sha256
+platter-cli image create /dev/sdb rescue.img --recover --retries 3
+platter-cli image verify backup.img.zst --against /dev/sdb
+platter-cli image restore backup.img.zst /dev/sdc --expect-sha256 <hex>
+platter-cli clone /dev/sdb /dev/sdc --dry-run
+```
+
+| Option | Meaning |
+|---|---|
+| `--compress none\|zstd`, `--level N` | Image compression (default: zstd when the name ends in `.zst`); level 1-19 |
+| `--sparse` | Raw images only: all-zero blocks become holes |
+| `--force` | Replace an existing output file (otherwise refused) |
+| `--recover` | Continue past unreadable sectors: they are replaced by zeros and listed in the report (`image create`, `clone`) |
+| `--retries N` | Extra read attempts per failing block or sector (default 2, max 16) |
+| `--start`, `--end` | Source LBA range (`create`, `clone`); `verify --against`: where the image starts on the device |
+| `--target-offset LBA` | `restore` / `clone`: first LBA written on the target (default 0) |
+| `--no-verify` | Skip the read-back pass (`create`: re-reading the finished image; `restore` / `clone`: reading the target back) |
+| `--expect-sha256 HEX`, `--use-sidecar` | `restore`: hash the image first and refuse to write anything unless it matches |
+| `--sha256 HEX` | `verify`: expected checksum (default: `<file>.sha256` when present) |
+| `--no-sidecar` | `create`: do not write `<file>.sha256` |
+| `--block-size SIZE` | Copy block (default 1M) |
+| `--report FILE`, `--save`, `--json` | Output and history (reports carry a SHA-256 of their own body) |
+
+* The **checksum** is of the data stream (unreadable sectors count as zeros), not of the file. For a
+  `.zst` image `zstd -dc image.zst | sha256sum` gives the same value; platter's images are ordinary
+  single-frame zstd files that the `zstd` tool can read. Compressed images record their size, which
+  restore and verify rely on.
+* Images are written to `<file>.partial` and renamed only when complete; a cancelled or failed run
+  never leaves something that looks like a finished image.
+* A restore or clone refuses images/ranges that do not fit the confirmed range, devices with
+  different sector sizes (clone), and a target that is the source. The confirmed range is exactly
+  the sectors written: `restore` needs `ceil(image size / sector size)` sectors starting at
+  `--target-offset`; `clone` needs the copied sector count starting at `--target-offset`.
+* Exit codes: 15 when unreadable sectors were replaced by zeros, 16 when a checksum or read-back
+  comparison failed.
+* Not included: resuming an interrupted copy, reverse/trimming passes and a rescue log as in
+  `ddrescue`, partition/file-system resizing when the target is larger.

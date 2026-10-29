@@ -13,6 +13,7 @@
 #include "platter/core/sha256.hpp"
 #include "platter/reports/bench_report.hpp"
 #include "platter/reports/erase_report.hpp"
+#include "platter/reports/imaging_report.hpp"
 #include "platter/reports/scan_report.hpp"
 
 namespace fs = std::filesystem;
@@ -344,6 +345,13 @@ Result<std::int64_t> HistoryStore::record_erase(const erase::EraseResult& r) {
                                  static_cast<double>(r.passes.size()), reports::erase_to_json(r));
 }
 
+Result<std::int64_t> HistoryStore::record_imaging(const imaging::ImagingResult& r) {
+    const DeviceInfo dev = r.source ? *r.source : (r.target ? *r.target : DeviceInfo{});
+    return impl_->insert_session(SessionKind::imaging, dev, std::string(imaging::kind_name(r.kind)), r.started_utc,
+                                 std::string(operation_state_name(r.state)), reports::imaging_headline(r),
+                                 static_cast<double>(r.bytes), reports::imaging_to_json(r));
+}
+
 Result<std::int64_t> HistoryStore::record_document(SessionKind kind, const DeviceInfo& d, const std::string& subtype,
                                                    const std::string& started_utc, const std::string& state,
                                                    const std::string& headline, double primary_value,
@@ -407,6 +415,12 @@ Result<erase::EraseResult> HistoryStore::load_erase(std::int64_t id) {
     auto doc = impl_->document(SessionKind::erase, id);
     if (!doc) return doc.error();
     return reports::erase_from_json(*doc);
+}
+
+Result<imaging::ImagingResult> HistoryStore::load_imaging(std::int64_t id) {
+    auto doc = impl_->document(SessionKind::imaging, id);
+    if (!doc) return doc.error();
+    return reports::imaging_from_json(*doc);
 }
 
 Result<std::string> HistoryStore::load_document(SessionKind kind, std::int64_t id) { return impl_->document(kind, id); }

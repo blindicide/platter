@@ -47,6 +47,15 @@ add_library(platter-partitions STATIC partitions/partition_table.cpp partitions/
 target_link_libraries(platter-partitions PUBLIC platter-core)
 platter_set_warnings(platter-partitions)
 
+# ------------------------------------------------------------- platter-imaging
+add_library(platter-imaging STATIC imaging/image_file.cpp imaging/imaging.cpp)
+target_link_libraries(platter-imaging PUBLIC platter-core)
+if(TARGET platter-zstd)
+    target_link_libraries(platter-imaging PUBLIC platter-zstd)
+    target_compile_definitions(platter-imaging PUBLIC PLATTER_HAVE_ZSTD=1)
+endif()
+platter_set_warnings(platter-imaging)
+
 # ---------------------------------------------------------------- platter-mkfs
 add_library(platter-mkfs STATIC mkfs/mkfs.cpp)
 target_link_libraries(platter-mkfs PUBLIC platter-core)
@@ -76,9 +85,9 @@ platter_set_warnings(platter-erase)
 
 # ------------------------------------------------------------- platter-reports
 add_library(platter-reports STATIC reports/json.cpp reports/scan_report.cpp reports/bench_report.cpp
-    reports/erase_report.cpp)
+    reports/erase_report.cpp reports/imaging_report.cpp)
 target_link_libraries(platter-reports
-    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase
+    PUBLIC platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase platter-imaging
            nlohmann_json::nlohmann_json)
 platter_set_warnings(platter-reports)
 
@@ -89,9 +98,9 @@ platter_set_warnings(platter-storage)
 
 # ----------------------------------------------------------------- platter-cli
 if(PLATTER_BUILD_CLI)
-    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp)
+    add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp cli/cmd_imaging.cpp)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
-        platter-benchmark platter-erase platter-mkfs platter-reports platter-storage)
+        platter-benchmark platter-erase platter-mkfs platter-imaging platter-reports platter-storage)
     platter_set_warnings(platter-cli)
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()
@@ -109,6 +118,7 @@ if(PLATTER_BUILD_GUI)
         gui/tabs/surface_tab.cpp
         gui/tabs/benchmark_tab.cpp
         gui/tabs/erase_tab.cpp
+        gui/tabs/imaging_tab.cpp
         gui/widgets/surface_map.cpp
         gui/widgets/chart.cpp
         gui/widgets/confirm_dialog.cpp
@@ -127,7 +137,7 @@ if(PLATTER_BUILD_GUI)
     )
     target_link_libraries(platter-gui PRIVATE
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
-        platter-erase platter-mkfs platter-reports platter-storage)
+        platter-erase platter-mkfs platter-imaging platter-reports platter-storage)
     platter_set_warnings(platter-gui)
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

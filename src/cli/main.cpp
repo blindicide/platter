@@ -56,6 +56,10 @@ Read-only commands:
   benchmark read <device>       Read benchmark (see --test)
   benchmark history [<device>]  List saved benchmark sessions
   benchmark show <id>           Show a saved benchmark session
+  image create <device> <file>  Copy a device to an image (raw, or zstd for *.zst)
+  image verify <file>           Check an image's checksum (--against DEVICE compares)
+  image history | image show <id>  Saved imaging sessions
+  partitions types              List partition type names
   version                       Print version
 
 Destructive commands (preview first; typed confirmation required):
@@ -63,6 +67,10 @@ Destructive commands (preview first; typed confirmation required):
   erase methods                 List erase methods
   erase history                 Saved erase reports
   erase show <id>               Show a saved erase report
+  partitions init|add|delete|set|resize <device> ...   Edit the partition table
+  format <device> --fs fat32|exfat [--partition N]     Quick format
+  image restore <file> <device> Write an image to a device
+  clone <source> <target>       Copy one device onto another
 
 <device> is a device path (/dev/sda, \\.\PhysicalDrive1), a short name
 (sda, nvme0n1, pd1), or a raw image file (*.img).
@@ -77,6 +85,22 @@ Options:
   -d, --device-type T   smartctl device type (sat, nvme, usbjmicron, ...)
   -h, --help            This help
   --version             Print version
+
+Imaging options:
+  --compress none|zstd  Image compression (default: zstd for *.zst files)
+  --level N             zstd level 1-19 (default 3)
+  --sparse              Raw images: store all-zero blocks as holes
+  --force               Replace an existing output file
+  --recover             Continue past unreadable sectors (zero-filled, listed)
+  --retries N           Extra read attempts per failing block/sector (default 2)
+  --no-verify           Skip the read-back / re-read verification pass
+  --no-sidecar          Do not write <file>.sha256
+  --expect-sha256 HEX   restore: refuse unless the image has this checksum
+  --use-sidecar         restore: take that checksum from <file>.sha256
+  --sha256 HEX          verify: expected checksum (default: <file>.sha256)
+  --against DEVICE      verify: also compare the image with this device
+  --target-offset LBA   restore/clone: where on the target to write (default 0)
+  --start/--end LBA     create/clone: source range; verify --against: device start
 
 Surface scan options:
   --start LBA           First LBA (default 0)
@@ -148,9 +172,12 @@ const std::set<std::string> kValueOptions = {
     "--sizes", "--qds", "--history-db", "--limit",
     // destructive commands
     "--method", "--passes", "--pattern", "--verify", "--confirm", "--range", "--label", "--mode",
-    "--table", "--offset", "--type", "--name", "--attributes", "--fs", "--partition", "--cluster-size"};
+    "--table", "--offset", "--type", "--name", "--attributes", "--fs", "--partition", "--cluster-size",
+    // imaging
+    "--compress", "--level", "--against", "--sha256", "--expect-sha256", "--target-offset"};
 const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run",
-                                             "--bootable", "--no-bootable", "--logical", "--extended"};
+                                             "--bootable", "--no-bootable", "--logical", "--extended",
+                                             "--sparse", "--force", "--recover", "--no-verify", "--no-sidecar", "--use-sidecar"};
 
 std::optional<Options> parse_args(int argc, char** argv, int& exit_code) {
     Options o;
@@ -1005,6 +1032,33 @@ int main(int argc, char** argv) {
             return cmd_erase_show(*opts, *arg(2));
         }
         return usage_error("usage: erase run <device> | erase methods | erase history | erase show <id>");
+    }
+    if (cmd == "image") {
+        const char* usage = "usage: image create <device> <file> | image restore <file> <device> | image verify <file> | image history | image show <id>";
+        if (!arg(1)) return usage_error(usage);
+        const std::string sub = *arg(1);
+        if (sub == "create") {
+            if (!arg(3)) return usage_error("image create needs <device> <file>");
+            return cmd_image_create(*opts, *arg(2), *arg(3));
+        }
+        if (sub == "restore") {
+            if (!arg(3)) return usage_error("image restore needs <file> <device>");
+            return cmd_image_restore(*opts, *arg(2), *arg(3));
+        }
+        if (sub == "verify") {
+            if (!arg(2)) return usage_error("image verify needs a <file>");
+            return cmd_image_verify(*opts, *arg(2));
+        }
+        if (sub == "history") return cmd_image_history(*opts);
+        if (sub == "show") {
+            if (!arg(2)) return usage_error("image show needs a session id");
+            return cmd_image_show(*opts, *arg(2));
+        }
+        return usage_error(usage);
+    }
+    if (cmd == "clone") {
+        if (!arg(2)) return usage_error("clone needs <source> <target>");
+        return cmd_clone(*opts, *arg(1), *arg(2));
     }
     if (cmd == "format") {
         if (!arg(1)) return usage_error("format needs a <device>");

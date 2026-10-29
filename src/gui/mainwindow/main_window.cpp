@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: TBD
 #include "main_window.hpp"
 
+#include "../tabs/imaging_tab.hpp"
 #include "../widgets/partition_editor.hpp"
 
 #include <QAction>
@@ -90,6 +91,7 @@ MainWindow::~MainWindow() {
     if (surface_tab_) surface_tab_->stopAndWait();
     if (bench_tab_) bench_tab_->stopAndWait();
     if (erase_tab_) erase_tab_->stopAndWait();
+    if (imaging_tab_) imaging_tab_->stopAndWait();
     for (auto& t : workers())
         if (t) t->wait();
 }
@@ -166,6 +168,7 @@ void MainWindow::buildActions() {
         if (bench_tab_) bench_tab_->setHistory(history_.get(), on);
         if (surface_tab_) surface_tab_->setHistory(history_.get(), on);
         if (erase_tab_) erase_tab_->setHistory(history_.get(), on);
+        if (imaging_tab_) imaging_tab_->setHistory(history_.get(), on);
     });
 
     act_show_serials_ = new QAction(tr("Show Serial &Numbers"), this);
@@ -174,6 +177,7 @@ void MainWindow::buildActions() {
     connect(act_show_serials_, &QAction::toggled, this, [this](bool on) {
         show_serials_ = on;
         if (erase_tab_) erase_tab_->setShowSerials(on);
+        if (imaging_tab_) imaging_tab_->setShowSerials(on);
         showCurrent();
     });
 
@@ -321,11 +325,10 @@ void MainWindow::buildCentral() {
     tabs_->addTab(erase_tab_, tr("ERASE"));
     connect(erase_tab_, &EraseTab::logEvent, this,
             [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
-    tabs_->addTab(new PlannedTab(tr("Clone / Image"), QStringLiteral("v0.6"),
-                                 tr("Raw and zstd-compressed imaging, restore, disk-to-disk clone and "
-                                    "damaged-media recovery copy with an error map."),
-                                 tabs_),
-                  tr("CLONE / IMAGE"));
+    imaging_tab_ = new ImagingTab(tabs_);
+    tabs_->addTab(imaging_tab_, tr("CLONE / IMAGE"));
+    connect(imaging_tab_, &ImagingTab::logEvent, this,
+            [this](Severity sev, const QString& msg, const QString& dev) { log_->add(sev, msg, dev); });
     tabs_->addTab(new PlannedTab(tr("Hex Sector Inspector"), QStringLiteral("v0.7"),
                                  tr("Offset / hex / ASCII view with jump-to-LBA, search and structure "
                                     "interpreters for MBR, GPT, FAT, NTFS and ext4."),
@@ -395,6 +398,7 @@ void MainWindow::openHistory() {
     bench_tab_->setHistory(history_.get(), record_history_);
     surface_tab_->setHistory(history_.get(), record_history_);
     erase_tab_->setHistory(history_.get(), record_history_);
+    imaging_tab_->setHistory(history_.get(), record_history_);
 }
 
 void MainWindow::restoreSettings() {
@@ -407,7 +411,7 @@ void MainWindow::restoreSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning()) {
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning()) {
         const auto answer = QMessageBox::question(this, tr("Operation Running"),
                                                   tr("A scan, benchmark or erase is still running. Stop it and exit?"),
                                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -418,6 +422,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
         surface_tab_->stopAndWait();
         bench_tab_->stopAndWait();
         erase_tab_->stopAndWait();
+        imaging_tab_->stopAndWait();
     }
     QSettings s;
     s.setValue(QStringLiteral("window/geometry"), saveGeometry());
@@ -540,6 +545,8 @@ void MainWindow::showCurrent() {
     surface_tab_->setDevice(e);
     bench_tab_->setDevice(e);
     erase_tab_->setDevice(e);
+    imaging_tab_->setDevice(e);
+    imaging_tab_->setChoices(devices_);
     updateSummary();
     const bool has = e != nullptr;
     act_save_report_->setEnabled(has);
@@ -717,7 +724,7 @@ void MainWindow::readPartitions() {
 void MainWindow::editPartitions() {
     auto* e = current();
     if (!e || busy_parts_) return;
-    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning()) {
+    if (surface_tab_->isRunning() || bench_tab_->isRunning() || erase_tab_->isRunning() || imaging_tab_->isRunning()) {
         QMessageBox::information(this, tr("Partition Manager"), tr("Wait for the running operation to finish first."));
         return;
     }

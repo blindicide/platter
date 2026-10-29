@@ -2,6 +2,7 @@
 #include <filesystem>
 
 #include "platter/platform/enumerate.hpp"
+#include "platter/platform/direct_open.hpp"
 #include "platter/platform/linux_sysfs.hpp"
 #include "../file_device.hpp"
 
@@ -19,7 +20,7 @@ Result<DeviceInfo> describe_device(const std::string& path) {
     return sysfs::describe(sysfs::Roots{}, canon.filename().string());
 }
 
-Result<BlockDevicePtr> open_device(const std::string& path, const OpenOptions& opts) {
+Result<BlockDevicePtr> open_device_direct(const std::string& path, const OpenOptions& opts) {
     auto info = describe_device(path);
     if (!info) return info.error();
     auto d = std::move(info).value();

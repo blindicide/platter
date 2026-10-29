@@ -5,9 +5,11 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "platter/core/device.hpp"
 #include "platter/core/error.hpp"
+#include "platter/core/range.hpp"
 
 namespace platter {
 
@@ -27,6 +29,11 @@ struct OpenOptions {
     // Take an exclusive lock where the platform supports it (O_EXCL on Linux
     // block devices, FSCTL_LOCK_VOLUME on Windows volumes).
     bool exclusive = false;
+    // For read-write opens by the destructive pipeline: the byte spans the
+    // user confirmed. Direct opens ignore it (the AuthorizedTarget enforces
+    // it); the privileged helper (docs/privilege-separation.md) enforces it
+    // in the privileged process and refuses a read-write open without any.
+    std::vector<ByteSpan> write_ranges;
 };
 
 struct IOResult {
@@ -85,7 +92,9 @@ using BlockDevicePtr = std::unique_ptr<IBlockDevice>;
 Result<BlockDevicePtr> open_image(const std::string& path, const OpenOptions& opts = {},
                                   std::uint32_t sector_size = 512);
 
-// Opens a physical device by path using the platform backend.
+// Opens a physical device by path. Goes through the device broker (the
+// privileged helper) when one is installed, else straight to the platform
+// backend.
 Result<BlockDevicePtr> open_device(const std::string& path, const OpenOptions& opts = {});
 
 // Convenience: read whole sectors starting at `lba`.

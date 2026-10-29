@@ -120,6 +120,13 @@ Hex viewing and searching are read-only: they open devices `read_only`, and the 
 only reads when you press *Go* (selecting a device in the list never reads it). The history
 browser and `history delete` only touch the local SQLite database.
 
+## Privilege separation (v0.8)
+
+With the privileged helper (`docs/privilege-separation.md`) the safety pipeline still runs in the
+unprivileged process; additionally `authorize()` passes the confirmed byte ranges to the helper,
+which refuses read-write opens without them, writes/discards outside them, and read-write opens of
+devices that are in use.
+
 ## Testing rules
 
 - Unit and integration tests use sparse image files in temp directories.

@@ -18,6 +18,7 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QPointer>
 #include <QSettings>
 #include <QSplitter>
@@ -41,6 +42,9 @@
 #include "platter/core/block_device.hpp"
 #include "platter/platform/enumerate.hpp"
 #include "platter/platform/privileges.hpp"
+#ifdef PLATTER_HAVE_HELPER
+#include "platter/helper/helper.hpp"
+#endif
 #include "platter/reports/json.hpp"
 #include "platter/storage/history.hpp"
 #include "platter/version.hpp"
@@ -200,6 +204,23 @@ void MainWindow::buildMenus() {
     file->addAction(act_open_image_);
     file->addAction(act_save_report_);
     file->addSeparator();
+#ifdef PLATTER_HAVE_HELPER
+    act_helper_ = new QAction(tr("Use &Privileged Helper"), this);
+    act_helper_->setCheckable(true);
+    act_helper_->setEnabled(!running_elevated());
+    act_helper_->setStatusTip(running_elevated()
+                                  ? tr("Not needed: platter is already running with full privileges")
+                                  : tr("Open disks through a small root helper (asks for your password once) instead of running the whole program as root"));
+    connect(act_helper_, &QAction::toggled, this, [this](bool on) {
+        if (on == helper_on_) return;
+        if (!useHelper(on ? QStringLiteral("auto") : QStringLiteral("none"))) {
+            QSignalBlocker block(act_helper_);
+            act_helper_->setChecked(helper_on_);
+        }
+    });
+    file->addAction(act_helper_);
+    file->addSeparator();
+#endif
     file->addAction(act_exit_);
 
     auto* dev = menuBar()->addMenu(tr("&Device"));
@@ -771,6 +792,31 @@ void MainWindow::readPartitions() {
             },
             Qt::QueuedConnection);
     });
+}
+
+bool MainWindow::useHelper(const QString& spec) {
+#ifdef PLATTER_HAVE_HELPER
+    platter::set_device_broker(nullptr);
+    std::string note;
+    const bool on = !spec.isEmpty() && spec != QStringLiteral("none");
+    if (auto s = platter::helper::configure_helper(spec.toStdString(), platter::helper::executable_dir(), note); !s) {
+        QMessageBox::warning(this, tr("Privileged Helper"), qs(s.error().describe()));
+        log_->add(Severity::warning, tr("Privileged helper not enabled"), qs(s.error().describe()));
+        helper_on_ = false;
+        return false;
+    }
+    helper_on_ = on && platter::device_broker() != nullptr;
+    if (act_helper_) {
+        QSignalBlocker block(act_helper_);
+        act_helper_->setChecked(helper_on_);
+    }
+    st_priv_->setText(helper_on_ ? tr("Privileges: user + helper") : tr("Privileges: %1").arg(qs(privilege_label())));
+    log_->add(Severity::info, helper_on_ ? tr("Privileged helper enabled") : tr("Privileged helper off"), qs(note));
+    return true;
+#else
+    Q_UNUSED(spec);
+    return false;
+#endif
 }
 
 void MainWindow::showHistory() {

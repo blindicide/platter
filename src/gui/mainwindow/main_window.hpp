@@ -54,6 +54,10 @@ public:
 protected:
     void closeEvent(QCloseEvent* e) override;
 
+public:
+    // Privilege separation: "auto", "none" or a helper command (see docs/privilege-separation.md).
+    bool useHelper(const QString& spec);
+
 private slots:
     void refreshDevices();
     void onDeviceSelected(int index);
@@ -130,6 +134,8 @@ private:
     QAction* act_record_ = nullptr;
     QAction* act_show_serials_ = nullptr;
     QAction* act_about_ = nullptr;
+    QAction* act_helper_ = nullptr;
+    bool helper_on_ = false;
     QAction* act_license_ = nullptr;
 
     bool busy_smart_ = false;

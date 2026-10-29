@@ -23,6 +23,13 @@ add_executable(platter-tests
     unit/test_qualify.cpp
     unit/test_erase_report.cpp
 )
+if(UNIX)
+    target_sources(platter-tests PRIVATE unit/test_helper.cpp)
+    target_link_libraries(platter-tests PRIVATE platter-helper-lib)
+    target_include_directories(platter-tests PRIVATE ${PROJECT_SOURCE_DIR}/src/helper)
+    target_compile_definitions(platter-tests PRIVATE PLATTER_HELPER_PATH="$<TARGET_FILE:platter-helper>")
+    add_dependencies(platter-tests platter-helper)
+endif()
 target_include_directories(platter-tests PRIVATE support)
 target_link_libraries(platter-tests PRIVATE platter-core platter-partitions platter-smart platter-surface platter-benchmark platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage SQLite::SQLite3 Catch2::Catch2WithMain)
 target_compile_definitions(platter-tests PRIVATE

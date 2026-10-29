@@ -59,6 +59,7 @@ platter-cli [options] <command> [arguments]
 | `-q, --quiet` | No normal output; use the exit code. |
 | `--show-serial` | Include serial numbers. **Hidden/masked by default** (spec §4.2). |
 | `--sector-size N` | Logical sector size for image files: 512 (default) or 4096. |
+| `--helper SPEC` | Open devices through the privileged helper: `auto`, `none`, or a command such as `"sudo /usr/libexec/platter/platter-helper"`. Also `$PLATTER_HELPER`. See [privilege-separation.md](privilege-separation.md). |
 | `-d, --device-type T` | smartctl device type, e.g. `sat`, `nvme`, `usbjmicron`, `usbcypress`. |
 | `-h, --help`, `--version` | |
 

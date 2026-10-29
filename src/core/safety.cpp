@@ -313,6 +313,14 @@ Result<AuthorizedTarget> authorize(const Preview& shown, std::string_view typed_
     OpenOptions oo;
     oo.mode = OpenMode::read_write;
     oo.exclusive = true;
+    {
+        // The confirmed spans, in bytes, for a privileged helper to enforce.
+        const std::uint64_t ss = fresh->device.logical_sector_size ? fresh->device.logical_sector_size : 512;
+        for (const auto& r : fresh->ranges) {
+            if (r.count == 0) continue;
+            oo.write_ranges.push_back(ByteSpan{r.first * ss, r.count * ss});
+        }
+    }
     std::vector<std::string> warnings;
     auto open = [&](bool direct) {
         oo.direct_io = direct;

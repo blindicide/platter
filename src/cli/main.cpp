@@ -23,6 +23,9 @@
 #endif
 
 #include "platter/core/block_device.hpp"
+#ifdef PLATTER_HAVE_HELPER
+#include "platter/helper/helper.hpp"
+#endif
 #include "platter/partitions/partition_table.hpp"
 #include "platter/platform/enumerate.hpp"
 #include "platter/benchmark/benchmark.hpp"
@@ -88,6 +91,8 @@ Options:
   --show-serial         Include serial numbers (hidden by default)
   --sector-size N       Logical sector size for image files (512|4096)
   -d, --device-type T   smartctl device type (sat, nvme, usbjmicron, ...)
+  --helper SPEC         Open devices through the privileged helper: auto, none, or a command
+                        (e.g. "sudo /usr/libexec/platter/platter-helper"); also $PLATTER_HELPER
   -h, --help            This help
   --version             Print version
 
@@ -185,7 +190,9 @@ const std::set<std::string> kValueOptions = {
     // inspector
     "--lba", "--sectors", "--hex", "--ascii", "--utf16", "--as",
     // qualification
-    "--samples", "--slow-ms", "--kind"};
+    "--samples", "--slow-ms", "--kind",
+    // privilege separation
+    "--helper"};
 const std::set<std::string> kFlagOptions = {"--buffered", "--map", "--save", "--chart", "--dry-run",
                                              "--bootable", "--no-bootable", "--logical", "--extended",
                                              "--sparse", "--force", "--recover", "--no-verify", "--no-sidecar", "--use-sidecar",
@@ -986,6 +993,20 @@ int main(int argc, char** argv) {
     if (p.empty()) return usage_error("no command given");
 
     const auto& cmd = p[0];
+#ifdef PLATTER_HAVE_HELPER
+    {
+        // Privilege separation: --helper auto|none|"<command>" or $PLATTER_HELPER.
+        std::string spec;
+        if (auto v = opt(*opts, "helper")) spec = *v;
+        else if (const char* e = std::getenv("PLATTER_HELPER")) spec = e;
+        std::string note;
+        if (auto s = platter::helper::configure_helper(spec, platter::helper::executable_dir(), note); !s) {
+            std::cerr << "platter-cli: " << s.error().describe() << "\n";
+            return kUsage;
+        }
+        if (!note.empty() && !opts->quiet) std::cerr << "note: " << note << "\n";
+    }
+#endif
     auto arg = [&](std::size_t i) -> const std::string* { return i < p.size() ? &p[i] : nullptr; };
 
     if (cmd == "version") {

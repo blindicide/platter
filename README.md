@@ -6,13 +6,15 @@ inspection, and, in later milestones, surface scans, benchmarks, erasure,
 imaging and cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v0.7 (sector inspector, qualification, history browser).** Destructive operations exist and go
+> **Status: v0.8 (privilege separation).** Destructive operations exist and go
 > through a typed-confirmation safety gate, but have only ever been run against
 > image files and test doubles, never real hardware. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
 
 ## What works today
 
+- Optional root helper (`platter-helper`, Linux): run the GUI/CLI unprivileged and open disks through
+  a small helper that enforces the confirmed write ranges ([docs](docs/privilege-separation.md))
 - Hex sector viewer and searcher (read-only) that decodes MBR, GPT, FAT/exFAT/NTFS
   boot sectors, NTFS MFT records and ext superblocks; byte/ASCII/UTF-16 search
 - Drive qualification (burn-in): write passes, read-back, final read, random

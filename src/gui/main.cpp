@@ -47,9 +47,12 @@ int main(int argc, char** argv) {
     QCommandLineOption editor_shot({QStringLiteral("editor-screenshot")},
                                    QStringLiteral("Render the partition manager for the first image to FILE and exit."),
                                    QStringLiteral("file"));
+    QCommandLineOption helper_opt({QStringLiteral("helper")},
+                                  QStringLiteral("Open devices through the privileged helper: auto, none, or a command."),
+                                  QStringLiteral("spec"));
     QCommandLineOption hex_lba({QStringLiteral("hex-lba")}, QStringLiteral("Read this LBA in the HEX tab (testing)."),
                                QStringLiteral("lba"));
-    cli.addOptions({hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
+    cli.addOptions({helper_opt, hex_lba, editor_shot, sector, shot, tab, size, select, smart_now, open_scan, start_scan, bench_kind, start_bench, shot_delay,
                     compare});
     cli.process(app);
 
@@ -71,6 +74,7 @@ int main(int argc, char** argv) {
     platter::gui::MainWindow w;
     const auto ss = cli.value(sector).toUInt() == 4096 ? 4096u : 512u;
     for (const auto& img : cli.positionalArguments()) w.openImage(img, ss);
+    if (cli.isSet(helper_opt)) w.useHelper(cli.value(helper_opt));
     if (cli.isSet(select)) w.selectIndex(cli.value(select).toInt());
     if (cli.isSet(tab)) w.selectTab(cli.value(tab));
     if (cli.isSet(hex_lba)) w.hexTab()->showLba(cli.value(hex_lba).toULongLong());

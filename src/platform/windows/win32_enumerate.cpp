@@ -15,6 +15,7 @@
 
 #include "platter/core/block_device.hpp"
 #include "platter/platform/enumerate.hpp"
+#include "platter/platform/direct_open.hpp"
 #include "../file_device.hpp"
 #include "win32_util.hpp"
 
@@ -264,7 +265,7 @@ Result<DeviceInfo> describe_device(const std::string& path) {
     return describe_number(*n, volume_map(), system_drive_root());
 }
 
-Result<BlockDevicePtr> open_device(const std::string& path, const OpenOptions& opts) {
+Result<BlockDevicePtr> open_device_direct(const std::string& path, const OpenOptions& opts) {
     auto info = describe_device(path);
     if (!info) return info.error();
     auto d = std::move(info).value();

@@ -36,12 +36,36 @@ Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
 
 ## 2. Current status
 
-Milestone: **v0.7 Inspector / qualification / history browser — feature-complete in code, never run on real hardware**
-(see "v0.7 so far"). Previously: **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
+Milestone: **v0.8 Privilege separation (Linux helper) — feature-complete in code, never run on real hardware**
+(see "v0.8 so far"). Previously: **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
 vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
 green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
 v0.2 acceptance needs "supported physical devices", i.e. the owner's
 disposable HDD / USB stick, with the important drive unplugged).
+
+### v0.8 so far
+- **Privilege separation** (POSIX only; see docs/privilege-separation.md): `platter-helper`
+  (`src/helper/helper_main.cpp`, installs to libexec/platter) serves ONE client over stdin/stdout
+  (a socketpair created by the client; no listening socket). Library `platter-helper-lib`:
+  `wire.{hpp,cpp}` (framing, DeviceInfo/Error codec), `server.cpp` (root side),
+  `client.cpp` (`HelperBroker`, `RemoteDevice : IBlockDevice`, `LazyBroker`,
+  `configure_helper`, `auto_helper_command`, `find_helper_binary`). Public header
+  `include/platter/helper/helper.hpp`.
+- **Hook**: `include/platter/core/broker.hpp` — `set_device_broker()`; `open_device()` (now defined in
+  `src/core/broker.cpp`) routes through the broker if installed, else `open_device_direct()`
+  (`include/platter/platform/direct_open.hpp`; the old per-platform `open_device` bodies were renamed,
+  incl. the Windows one — compiled under MinGW only). `OpenOptions::write_ranges` (byte spans) is
+  filled by `safety::authorize()` from the confirmed LBA ranges; direct opens ignore it, the helper
+  enforces it (refuses rw open without ranges, writes/discards outside them, rw of in-use devices,
+  anything that is not a whole-disk block device under /dev).
+- **CLI** `--helper auto|none|"<cmd>"` / `$PLATTER_HELPER`; **GUI** File > Use Privileged Helper and
+  `--helper SPEC`. Started lazily on first device open. Images never go through the helper.
+- **Tests**: `tests/unit/test_helper.cpp` runs the real helper binary against temp images
+  (`--allow-regular-files` is a TEST-ONLY switch). Not tested: pkexec/sudo launch, the helper against
+  a real block device, `authorize()` over the helper for a real device.
+- Known limits: one serialised connection (queue-depth benchmarks are meaningless through it),
+  no automatic re-launch if the helper dies, Windows has no helper (run elevated).
+- `packaging/linux/org.platter.helper.policy`: polkit action for pkexec (path must match install path).
 
 ### v0.7 so far
 - **Inspector** `include/platter/inspect/inspect.hpp`, `src/inspect/inspect.cpp` (lib
@@ -425,8 +449,7 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 ### Next up (in order)
 1. Owner's real-hardware runs (read-only first, then destructive on the
    disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. (v0.7 done)
-   v0.8 privilege separation, v0.9 settings and polish, v1.0 release prep (see sections below
+2. (v0.8 done) v0.9 settings and polish, v1.0 release prep (see sections below
    as they get filled in).
 
 ## 3. Layout

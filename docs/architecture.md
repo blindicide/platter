@@ -60,4 +60,4 @@
 | partition editing (`partitions/partition_edit`), native FAT32/exFAT format (`src/mkfs`) | v0.5 (done) |
 | imaging / cloning, zstd (`src/imaging`) | v0.6 (done) |
 | hex inspector (`src/inspect`), qualification (`src/qualify`), history browser (`src/storage`) | v0.7 (done) |
-| privileged helper (Linux), privilege separation | v0.8 |
+| privileged helper (Linux), privilege separation (`src/helper`) | v0.8 (done) |

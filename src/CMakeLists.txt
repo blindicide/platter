@@ -10,6 +10,7 @@ add_library(platter-core STATIC
     core/chacha20.cpp
     core/time_util.cpp
     core/safety.cpp
+    core/broker.cpp
     platform/image/image_info.cpp
     platform/privileges.cpp
 )
@@ -41,6 +42,19 @@ target_include_directories(platter-core PUBLIC
     ${PROJECT_BINARY_DIR}/generated)
 target_compile_features(platter-core PUBLIC cxx_std_20)
 platter_set_warnings(platter-core)
+
+# ------------------------------------------------------------- platter-helper
+# Privilege separation (POSIX only): a root helper process plus the client
+# that lets unprivileged programs open devices through it.
+if(UNIX)
+    add_library(platter-helper-lib STATIC helper/wire.cpp helper/server.cpp helper/client.cpp)
+    target_link_libraries(platter-helper-lib PUBLIC platter-core)
+    platter_set_warnings(platter-helper-lib)
+    add_executable(platter-helper helper/helper_main.cpp)
+    target_link_libraries(platter-helper PRIVATE platter-helper-lib)
+    platter_set_warnings(platter-helper)
+    install(TARGETS platter-helper RUNTIME DESTINATION libexec/platter)
+endif()
 
 # ---------------------------------------------------------- platter-partitions
 add_library(platter-partitions STATIC partitions/partition_table.cpp partitions/partition_edit.cpp)
@@ -112,6 +126,10 @@ if(PLATTER_BUILD_CLI)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
         platter-benchmark platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-cli)
+    if(UNIX)
+        target_link_libraries(platter-cli PRIVATE platter-helper-lib)
+        target_compile_definitions(platter-cli PRIVATE PLATTER_HAVE_HELPER=1)
+    endif()
     install(TARGETS platter-cli RUNTIME DESTINATION bin)
 endif()
 
@@ -157,5 +175,9 @@ if(PLATTER_BUILD_GUI)
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
         platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-gui)
+    if(UNIX)
+        target_link_libraries(platter-gui PRIVATE platter-helper-lib)
+        target_compile_definitions(platter-gui PRIVATE PLATTER_HAVE_HELPER=1)
+    endif()
     install(TARGETS platter-gui RUNTIME DESTINATION bin)
 endif()

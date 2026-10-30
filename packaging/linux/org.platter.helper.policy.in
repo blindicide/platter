@@ -2,8 +2,8 @@
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!--
-  Lets `pkexec <prefix>/libexec/platter/platter-helper --stdio` show a
-  meaningful prompt. `cmake --install` writes this file (with the real install
+  Lets pkexec launch the helper in <prefix>/libexec/platter/ with a
+  meaningful prompt. CMake installation writes this file (with the real install
   path substituted) to <prefix>/share/polkit-1/actions/. The exec.path
   annotation must match the installed helper path exactly.
 -->

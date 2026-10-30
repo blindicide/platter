@@ -4888,20 +4888,20 @@ They are omitted by default because reports are often shared.</source>
         <translation>&lt;b&gt;platter %1&lt;/b&gt;&lt;br&gt;Утилита для диагностики, обслуживания и управления накопителями.&lt;br&gt;&lt;br&gt;Она опознаёт устройства, читает данные SMART через smartmontools, сканирует поверхность, выполняет тесты производительности и изучает секторы, ничего не записывая. Стирание, квалификация, разметка, форматирование, восстановление и клонирование ЗАПИСЫВАЮТ данные на устройство, и каждая такая операция сначала показывает предпросмотр и требует подтверждения вводом текста.&lt;br&gt;&lt;br&gt;Никакой телеметрии. Никакого доступа к сети. Никакой регистрации.</translation>
     </message>
     <message>
+        <source>Yakunin R. (c) 2026. All rights reserved.</source>
+        <translation>Якунин Р. (c) 2026. Все права защищены.</translation>
+    </message>
+    <message>
         <source>License Information</source>
         <translation>Сведения о лицензии</translation>
     </message>
     <message>
-        <source>platter: Copyright (c) 2026 Ruslan Yakunin. All rights reserved.
-
-Third-party components:
+        <source>Third-party components:
   Qt 6 (LGPL v3)
   nlohmann/json (MIT)
   smartmontools (GPL v2, invoked as an external program)
 </source>
-        <translation>platter: Copyright (c) 2026 Ruslan Yakunin. Все права защищены.
-
-Сторонние компоненты:
+        <translation>Сторонние компоненты:
   Qt 6 (LGPL v3)
   nlohmann/json (MIT)
   smartmontools (GPL v2, запускается как внешняя программа)

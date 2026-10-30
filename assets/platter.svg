@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>platter</title>
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#1d3148"/>
+  <circle cx="124" cy="124" r="88" fill="#dbe4eb"/>
+  <circle cx="124" cy="124" r="68" fill="none" stroke="#9aafbf" stroke-width="4"/>
+  <circle cx="124" cy="124" r="48" fill="none" stroke="#9aafbf" stroke-width="4"/>
+  <circle cx="124" cy="124" r="23" fill="#1d3148"/>
+  <circle cx="124" cy="124" r="8" fill="#dbe4eb"/>
+  <path d="M208 204 L145 151 L158 137 L221 190 Z" fill="#53c5bf" stroke="#1d3148" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="212" cy="201" r="14" fill="#53c5bf" stroke="#1d3148" stroke-width="6"/>
+</svg>

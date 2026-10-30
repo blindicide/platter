@@ -994,12 +994,14 @@ void MainWindow::about() {
                           "partitioning, formatting, restoring and cloning WRITE to a device, and each one "
                           "shows a preview and asks for a typed confirmation first.<br><br>"
                           "No telemetry. No network access. No registration.")
-                           .arg(QString::fromLatin1(kVersion)));
+                           .arg(QString::fromLatin1(kVersion)) + QStringLiteral("<br><br>") +
+                           tr("Yakunin R. (c) 2026. All rights reserved."));
 }
 
 void MainWindow::licenseInfo() {
     QMessageBox::information(this, tr("License Information"),
-                             tr("platter: Copyright (c) 2026 Ruslan Yakunin. All rights reserved.\n\n"
+                             tr("Yakunin R. (c) 2026. All rights reserved.") + QStringLiteral("\n\n") +
+                             tr(
                                 "Third-party components:\n"
                                 "  Qt 6 (LGPL v3)\n"
                                 "  nlohmann/json (MIT)\n"

@@ -4,6 +4,7 @@ Name=platter
 GenericName=Storage Operations Suite
 Comment=Storage diagnostics, maintenance and management
 Exec=platter-gui
+Icon=platter
 Terminal=false
 Categories=System;Utility;
 Keywords=disk;hdd;ssd;smart;benchmark;partition;

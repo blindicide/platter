@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="platter.png">../../assets/platter.png</file>
+  </qresource>
+</RCC>

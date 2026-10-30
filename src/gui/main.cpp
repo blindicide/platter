@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDialog>
+#include <QIcon>
 #include <QScreen>
 #include <QSettings>
 #include <QTimer>
@@ -28,6 +29,7 @@ int main(int argc, char** argv) {
     QApplication::setOrganizationName(QStringLiteral("platter"));
     QApplication::setApplicationName(QStringLiteral("platter"));
     QApplication::setApplicationVersion(QString::fromLatin1(platter::kVersion));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/platter.png")));
     platter::gui::remember_system_theme(app);
     platter::gui::apply_theme(app, QSettings().value(QStringLiteral("prefs/theme"), QStringLiteral("classic")).toString() != QStringLiteral("system"));
 
@@ -64,7 +66,7 @@ int main(int argc, char** argv) {
     QCommandLineOption lang_opt({QStringLiteral("lang")}, QStringLiteral("Interface language for this run: en or ru (default: the saved setting)."),
                                 QStringLiteral("code"));
     QCommandLineOption dialog_shot({QStringLiteral("dialog-screenshot")},
-                                   QStringLiteral("Render a dialog (preferences|help|history|checksum) as NAME=FILE and exit (testing)."),
+                                   QStringLiteral("Render a dialog (preferences|help|history|checksum|about) as NAME=FILE and exit (testing)."),
                                    QStringLiteral("name=file"));
     QCommandLineOption hex_lba({QStringLiteral("hex-lba")}, QStringLiteral("Read this LBA in the HEX tab (testing)."),
                                QStringLiteral("lba"));
@@ -93,6 +95,18 @@ int main(int argc, char** argv) {
         const auto spec = cli.value(dialog_shot);
         const auto name = spec.section(QLatin1Char('='), 0, 0);
         const auto file = spec.section(QLatin1Char('='), 1);
+        if (name == QStringLiteral("about")) {
+            QTimer::singleShot(300, &w, [file] {
+                for (auto* widget : QApplication::topLevelWidgets()) {
+                    if (auto* dialog = qobject_cast<QDialog*>(widget)) {
+                        dialog->grab().save(file);
+                        dialog->accept();
+                    }
+                }
+            });
+            QMetaObject::invokeMethod(&w, "about", Qt::DirectConnection);
+            return 0;
+        }
         std::unique_ptr<QDialog> dlg;
         if (name == QStringLiteral("confirm") && !cli.positionalArguments().isEmpty()) {
             // Testing aid: shows the real confirmation dialog for an erase of the given IMAGE file,

@@ -121,11 +121,20 @@ target_link_libraries(platter-storage PUBLIC platter-reports PRIVATE SQLite::SQL
 platter_set_warnings(platter-storage)
 
 # ----------------------------------------------------------------- platter-cli
+if(WIN32)
+    enable_language(RC)
+    configure_file(${PROJECT_SOURCE_DIR}/packaging/windows/platter.rc.in
+        ${PROJECT_BINARY_DIR}/generated/platter.rc @ONLY)
+endif()
+
 if(PLATTER_BUILD_CLI)
     add_executable(platter-cli cli/main.cpp cli/cmd_erase.cpp cli/cmd_partitions.cpp cli/cmd_format.cpp cli/cmd_imaging.cpp cli/cmd_inspect.cpp cli/cmd_qualify.cpp cli/cmd_history.cpp)
     target_link_libraries(platter-cli PRIVATE platter-core platter-partitions platter-smart platter-surface
         platter-benchmark platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-cli)
+    if(WIN32)
+        target_sources(platter-cli PRIVATE ${PROJECT_BINARY_DIR}/generated/platter.rc)
+    endif()
     if(UNIX)
         target_link_libraries(platter-cli PRIVATE platter-helper-lib)
         target_compile_definitions(platter-cli PRIVATE PLATTER_HAVE_HELPER=1)
@@ -138,6 +147,7 @@ if(PLATTER_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     add_executable(platter-gui WIN32
         gui/main.cpp
+        gui/assets.qrc
         gui/styles/classic_theme.cpp
         gui/widgets/log_model.cpp
         gui/widgets/table_tools.cpp
@@ -186,6 +196,10 @@ if(PLATTER_BUILD_GUI)
         Qt6::Widgets platter-core platter-partitions platter-smart platter-surface platter-benchmark
         platter-erase platter-mkfs platter-imaging platter-inspect platter-qualify platter-reports platter-storage)
     platter_set_warnings(platter-gui)
+    set_target_properties(platter-gui PROPERTIES AUTORCC ON)
+    if(WIN32)
+        target_sources(platter-gui PRIVATE ${PROJECT_BINARY_DIR}/generated/platter.rc)
+    endif()
 
     # ---- translations: translations/platter_<lang>.ts -> .qm embedded as :/i18n/
     set(PLATTER_TS_FILES ${PROJECT_SOURCE_DIR}/translations/platter_ru.ts)

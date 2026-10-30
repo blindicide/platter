@@ -42,6 +42,7 @@ if(UNIX AND NOT APPLE)
                        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/polkit-1/actions/org.platter.helper.policy\" @ONLY)
     ")
     install(FILES packaging/linux/platter.desktop DESTINATION share/applications)
+    install(FILES assets/platter.svg DESTINATION share/icons/hicolor/scalable/apps)
 endif()
 
 # ------------------------------------------------------------------- cpack

@@ -21,6 +21,14 @@ include(PlatterWarnings)
 
 configure_file(cmake/version.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/platter/version.hpp" @ONLY)
 
+if(WIN32)
+    set(PLATTER_RUNTIME_DESTINATION app)
+    set(PLATTER_DOC_DESTINATION docs)
+else()
+    set(PLATTER_RUNTIME_DESTINATION bin)
+    set(PLATTER_DOC_DESTINATION share/doc/platter)
+endif()
+
 add_subdirectory(src)
 
 if(PLATTER_BUILD_TESTS)
@@ -29,9 +37,9 @@ if(PLATTER_BUILD_TESTS)
 endif()
 
 # ------------------------------------------------------------------ install
-install(FILES README.md CHANGELOG.md LICENSE DESTINATION share/doc/platter)
-install(DIRECTORY packaging/licenses/ DESTINATION share/doc/platter/licenses)
-install(DIRECTORY docs/ DESTINATION share/doc/platter FILES_MATCHING PATTERN "*.md")
+install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${PLATTER_DOC_DESTINATION})
+install(DIRECTORY packaging/licenses/ DESTINATION ${PLATTER_DOC_DESTINATION}/licenses)
+install(DIRECTORY docs/ DESTINATION ${PLATTER_DOC_DESTINATION} FILES_MATCHING PATTERN "*.md")
 if(UNIX AND NOT APPLE)
     # pkexec needs the exact installed path of the helper in its policy, so the
     # file is generated at install time, when the real prefix is known.

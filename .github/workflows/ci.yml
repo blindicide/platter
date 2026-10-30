@@ -123,6 +123,9 @@ jobs:
         run: |
           cmake --version
           scripts/ci-run.sh "Windows configure" cmake -S . -B build -A x64
+          version="$(sed -n 's/^CMAKE_PROJECT_VERSION:STATIC=//p' build/CMakeCache.txt)"
+          test -n "$version"
+          echo "PLATTER_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Build
         run: scripts/ci-run.sh "Windows build" cmake --build build --config Release --parallel
@@ -149,11 +152,8 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist/platter
-          cp build/src/Release/platter-cli.exe build/src/Release/platter-gui.exe dist/platter/
-          cp LICENSE README.md CHANGELOG.md dist/platter/
-          cp -r docs packaging/licenses dist/platter/
-          windeployqt --release --translations ru --no-opengl-sw dist/platter/platter-gui.exe
+          cmake --install build --config Release --prefix "$PWD/dist/platter"
+          windeployqt --release --translations ru --no-opengl-sw dist/platter/app/platter-gui.exe
 
       # smartmontools (GPL-2.0-or-later) is shipped unmodified as a separate program that platter
       # runs for SMART data; see packaging/windows/SMARTMONTOOLS.txt.
@@ -161,22 +161,41 @@ jobs:
         run: |
           choco install smartmontools -y --no-progress
           SM="/c/Program Files/smartmontools"
-          mkdir -p dist/platter/smartmontools
-          cp "$SM/bin/smartctl.exe" dist/platter/smartmontools/
-          cp packaging/licenses/GPL-2.txt dist/platter/smartmontools/COPYING.txt
-          find "$SM" -iname drivedb.h -exec cp '{}' dist/platter/smartmontools/ \;
-          cp packaging/windows/SMARTMONTOOLS.txt dist/platter/smartmontools/README.txt
-          dist/platter/smartmontools/smartctl.exe --version | head -3
-          ls dist/platter/smartmontools
+          mkdir -p dist/platter/app/smartmontools
+          cp "$SM/bin/smartctl.exe" dist/platter/app/smartmontools/
+          cp packaging/licenses/GPL-2.txt dist/platter/app/smartmontools/COPYING.txt
+          find "$SM" -iname drivedb.h -exec cp '{}' dist/platter/app/smartmontools/ \;
+          cp packaging/windows/SMARTMONTOOLS.txt dist/platter/app/smartmontools/README.txt
+          dist/platter/app/smartmontools/smartctl.exe --version | head -3
+          ls dist/platter/app/smartmontools
+
+      - name: Portable package smoke test (images only)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          mkdir -p "package smoke"
+          cp blank.img "package smoke/sample disk.img"
+          (
+            cd "package smoke"
+            "$GITHUB_WORKSPACE/dist/platter/platter-cli.exe" --version
+            "$GITHUB_WORKSPACE/dist/platter/platter-cli.exe" devices info "sample disk.img"
+            set +e
+            "$GITHUB_WORKSPACE/dist/platter/platter-cli.exe" smart show "sample disk.img"
+            rc=$?
+            set -e
+            test "$rc" -eq 7
+            "$GITHUB_WORKSPACE/dist/platter/platter.exe" "sample disk.img" --lang ru --screenshot portable.png
+            test -s portable.png
+          )
 
       - name: Zip release
-        run: 7z a platter-1.1.2-windows-x64.zip ./dist/platter
+        run: 7z a "platter-${PLATTER_VERSION}-windows-x64.zip" ./dist/platter
 
       - uses: actions/upload-artifact@v4
         with:
           name: platter-windows-x64
           path: |
-            platter-1.1.2-windows-x64.zip
+            platter-${{ env.PLATTER_VERSION }}-windows-x64.zip
             gui-windows.png
 
   windows-cross:

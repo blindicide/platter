@@ -2,11 +2,11 @@
 
 A native, cross-platform (Windows 10/11, Linux) storage diagnostics, maintenance
 and management utility: device identification, SMART health, partition
-inspection, and, in later milestones, surface scans, benchmarks, erasure,
-imaging and cloning. It has a deliberately old-school, information-dense
+inspection and editing, surface scans, benchmarks, erasure, imaging and
+cloning. It has a deliberately old-school, information-dense
 Win2000-style Qt Widgets interface.
 
-> **Status: v1.1.2.** Destructive operations exist and go
+> **Status: v1.1.3.** Destructive operations exist and go
 > through a typed-confirmation safety gate, and the owner reports that hardware validation has mostly succeeded. The Windows USB-to-SATA
 > SMART hang remains under investigation. Automated tests use images and test doubles. See [HANDOFF.md](HANDOFF.md) for the detailed state of
 > the code and [docs/safety.md](docs/safety.md) for the safety model.
@@ -88,6 +88,12 @@ Options: `PLATTER_BUILD_GUI`, `PLATTER_BUILD_CLI`, `PLATTER_BUILD_TESTS`,
 For SMART data, install [smartmontools](https://www.smartmontools.org/).
 
 ## Usage
+
+The Windows portable ZIP has two entry points: `platter.exe` opens the GUI and
+`platter-cli.exe` runs the CLI. Extract the whole ZIP before starting either one.
+The `app/` folder contains the application binaries, Qt runtime, plugins, translations
+and smartmontools; `docs/` contains documentation, the license and third-party notices.
+Keep these folders beside the launchers. Relative image paths use your current working directory.
 
 ```sh
 platter-cli devices list

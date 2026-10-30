@@ -3,6 +3,30 @@
 Living notes for whoever (human or agent) picks this repo up next. Update this
 file after every significant change. Newest status at the top of each section.
 
+## 1.1.3 housekeeping update
+
+Version metadata is 1.1.3. Windows CI derives the archive name from CMake's configured version.
+README and current status notes now reflect the shipped features, linked dependencies and license.
+The Windows portable ZIP now exposes `platter.exe` (GUI) and `platter-cli.exe` launchers, with
+the real executables and runtime in `app/` and documentation/licenses in `docs/`. Launchers preserve
+arguments, working directory and child exit status; CI smoke-checks the assembled package on images.
+The disk-and-head logo is in `assets/` (editable SVG, embedded PNG, Windows ICO). Windows executables
+also have version resources. About and License Information show the author's localized copyright notice.
+This release also includes the GUI completion-signal connection fix committed after 1.1.2 preparation.
+Hardware validation status is unchanged; see the release checklist and the 1.1.2 notes below.
+
+Local verification: GCC Release build with warnings as errors; `gui-regressions` and `translations`;
+English/Russian About screenshots; staged Linux install and CPack archive, including XML parsing and
+helper-path checks. Both Windows launchers and icon/version resources compile with MinGW warnings as
+errors; Wine smoke checks cover quoted/Unicode arguments, relative paths, CLI output, exit status and
+missing-runtime errors. Native Windows deployment and the assembled Qt package still require CI.
+
+Local branch history was sanitized without changing source trees, authors or dates. The original
+history is in `/tmp/platter-before-v1.1.3.bundle`, and the commit map is in
+`/tmp/platter-history-map.json`. Rewritten signatures were removed because they no longer validate.
+Remote-tracking refs and the detached external worktree still describe the original history;
+publishing the cleanup requires coordinated force-with-lease updates to the GitHub branches.
+
 ## 1.1.2 release update
 
 The owner reports hardware validation mostly works; Windows USB 3.0-to-SATA SMART hangs remain
@@ -44,16 +68,15 @@ document (the spec's `hos-*` names are renamed to `platter-*` throughout).
 Repo: https://github.com/blindicide/platter (public, default branch `main`).
 
 Stack: C++20, CMake ≥ 3.21, Qt 6 Widgets (GUI only), nlohmann_json, Catch2 v3
-(tests). zstd and SQLite are planned for later milestones and not yet linked.
+(tests), SQLite (history) and optional zstd (compressed images).
 
 ## 2. Current status
 
-Milestone: **v1.0 release prep — feature-complete, hardware validation + license pending**
-(see "v1.0 so far"). Previously: **v0.9 Preferences / help / polish**, **v0.8 Privilege separation (Linux helper)**, **v0.7 Inspector / qualification / history browser**, **v0.6 Imaging / cloning**. Previously: **v0.5 Partition editing + FAT32/exFAT format** and **v0.4 Erase + write tests** (same caveat). **v0.3 Benchmarking — feature-complete** (CI green incl. MSVC with
-vendored SQLite; no real-hardware run yet, by the owner's choice). Previously: **v0.2 Surface Testing — feature-complete** (v0.1 + v0.2 done; CI
-green on Linux, Windows MSVC and MinGW; still NO real-hardware run: the spec's
-v0.2 acceptance needs "supported physical devices", i.e. the owner's
-disposable HDD / USB stick, with the important drive unplugged).
+Milestone: **v1.1.3 housekeeping — feature-complete, proprietary license selected**.
+The owner reports mostly successful hardware validation; individual results remain unrecorded,
+and Windows USB-to-SATA SMART compatibility still needs confirmation. See
+`docs/release-checklist.md`. Milestone notes below record historical implementation and validation
+status; the release updates above describe the current state.
 
 ### v1.1 so far: Russian locale
 - English is the default; Russian is chosen in Preferences (`prefs/language` in QSettings, applies after
@@ -69,8 +92,8 @@ disposable HDD / USB stick, with the important drive unplugged).
 - smartctl is bundled into the Windows package by CI (`Bundle smartctl` step, choco). `find_smartctl()`
   order: $PLATTER_SMARTCTL, `<exe dir>/smartmontools/smartctl(.exe)`, `<exe dir>/smartctl(.exe)`, PATH,
   default install dirs. The CI step is unverified until the next Windows run; check the choco package
-  layout if it fails. Licensing: GPL text and source link ship in that folder; the owner still has to
-  pick platter's own license.
+  layout if it fails. Licensing: GPL text and source link ship in that folder; platter's own code is
+  proprietary (see LICENSE).
 - Not done / known limits: CLI, JSON and text reports stay English by design; untranslated are the report
   text panels (`*_to_text`), plan diff text, stored history headlines/states, raw OS and smartctl messages,
   CHS notation, and a few inspector values (e.g. "0 of 440 bytes non-zero"). The Russian text is
@@ -506,9 +529,9 @@ SQLite and side-by-side comparison of two saved maps (v0.7 per spec).
 - README.md, docs/architecture.md, docs/safety.md, docs/cli-reference.md.
 
 ### Next up (in order)
-1. Owner's real-hardware runs (read-only first, then destructive on the
-   disposable 1 TB HDD / USB stick with every other disk unplugged).
-2. (v1.0 prepared) Decide the license, then work through docs/release-checklist.md.
+1. Record the owner's hardware validation results and confirm Windows USB-to-SATA SMART behavior.
+   Further hardware runs require explicit device-specific authorization.
+2. Work through docs/release-checklist.md for v1.1.3, including CI and package verification.
 
 ## 3. Layout
 
@@ -601,10 +624,10 @@ Test helpers in `tests/support/` can synthesize GPT (`write_gpt`) and MBR+EBR
 
 - Windows: system-disk detection only checks the volume holding the Windows
   directory; the EFI/boot partition's disk is not yet flagged (TODO v0.8).
-- Windows: volume locking for exclusive disk access is implemented (v0.4) but
-  has never run; first real Windows write test must be on the disposable disk.
-- Windows unit tests have never run (no Wine here); CI will be first.
-- GUI has never been built with MSVC or run on Windows; only Linux/offscreen.
+- Windows: volume locking for exclusive disk access is implemented (v0.4); individual hardware
+  validation results still need recording despite the owner's mostly successful overall report.
+- Windows MSVC tests, GUI smoke checks and MinGW cross-builds are configured in CI;
+  check their results on the release commit.
 - Toolbar icons are Qt standard icons; spec wants small monochrome 16x16
   custom icons (assets/icons) later.
 - Image sector size in the GUI is 512 unless `--sector-size 4096` is passed

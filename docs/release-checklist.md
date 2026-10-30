@@ -1,7 +1,7 @@
 # Release checklist
 
-platter 1.1.2: the owner reports hardware validation has mostly succeeded and has authorized
-release preparation. Individual hardware checks below remain unrecorded unless explicitly confirmed.
+platter 1.1.3: housekeeping release preparation. The owner previously reported that hardware
+validation had mostly succeeded. Individual hardware checks below remain unrecorded unless explicitly confirmed.
 Windows USB-to-SATA SMART compatibility still needs testing with this build.
 
 ## Must decide

@@ -7,6 +7,7 @@ platter follows semantic versioning from 1.0. Before 1.0 each milestone was a mi
 - Refresh project status and handoff documentation to reflect shipped features, dependencies and the license decision.
 - Derive the Windows release archive version from CMake instead of hard-coding it in CI.
 - Keep the Windows portable package tidy: GUI and CLI launchers at the top level, runtime files in `app/` and documentation in `docs/`.
+- Exclude dependency development headers and libraries from release archives.
 - Add a disk-and-head application logo, Windows executable icons and version information, and a Linux desktop icon.
 - Show the author's copyright notice in English and Russian in About and License Information.
 - Fix an invalid XML comment in the installed Linux polkit policy.

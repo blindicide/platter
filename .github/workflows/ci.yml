@@ -94,7 +94,7 @@ jobs:
 
       - name: Release archive
         run: |
-          cmake --install build --prefix "$PWD/build/stage"
+          cmake --install build --component Runtime --prefix "$PWD/build/stage"
           (cd build && cpack -G TGZ)
 
       - uses: actions/upload-artifact@v4
@@ -152,7 +152,7 @@ jobs:
 
       - name: Package
         run: |
-          cmake --install build --config Release --prefix "$PWD/dist/platter"
+          cmake --install build --config Release --component Runtime --prefix "$PWD/dist/platter"
           windeployqt --release --translations ru --no-opengl-sw dist/platter/app/platter-gui.exe
 
       # smartmontools (GPL-2.0-or-later) is shipped unmodified as a separate program that platter
@@ -173,6 +173,12 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          for item in dist/platter/*; do
+            case "${item##*/}" in
+              platter.exe|platter-cli.exe|app|docs) ;;
+              *) echo "Unexpected package entry: $item"; exit 1 ;;
+            esac
+          done
           mkdir -p "package smoke"
           cp blank.img "package smoke/sample disk.img"
           (

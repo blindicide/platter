@@ -10,6 +10,9 @@ README and current status notes now reflect the shipped features, linked depende
 The Windows portable ZIP now exposes `platter.exe` (GUI) and `platter-cli.exe` launchers, with
 the real executables and runtime in `app/` and documentation/licenses in `docs/`. Launchers preserve
 arguments, working directory and child exit status; CI smoke-checks the assembled package on images.
+All product install rules use the `Runtime` component; CI stages that component and CPack explicitly
+packages it, excluding FetchContent dependencies' development headers/libraries. For a matching staged
+install, use `cmake --install build --component Runtime --prefix <staging-directory>`.
 The disk-and-head logo is in `assets/` (editable SVG, embedded PNG, Windows ICO). Windows executables
 also have version resources. About and License Information show the author's localized copyright notice.
 This release also includes the GUI completion-signal connection fix committed after 1.1.2 preparation.

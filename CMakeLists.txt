@@ -37,9 +37,9 @@ if(PLATTER_BUILD_TESTS)
 endif()
 
 # ------------------------------------------------------------------ install
-install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${PLATTER_DOC_DESTINATION})
-install(DIRECTORY packaging/licenses/ DESTINATION ${PLATTER_DOC_DESTINATION}/licenses)
-install(DIRECTORY docs/ DESTINATION ${PLATTER_DOC_DESTINATION} FILES_MATCHING PATTERN "*.md")
+install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${PLATTER_DOC_DESTINATION} COMPONENT Runtime)
+install(DIRECTORY packaging/licenses/ DESTINATION ${PLATTER_DOC_DESTINATION}/licenses COMPONENT Runtime)
+install(DIRECTORY docs/ DESTINATION ${PLATTER_DOC_DESTINATION} COMPONENT Runtime FILES_MATCHING PATTERN "*.md")
 if(UNIX AND NOT APPLE)
     # pkexec needs the exact installed path of the helper in its policy, so the
     # file is generated at install time, when the real prefix is known.
@@ -48,9 +48,9 @@ if(UNIX AND NOT APPLE)
         file(MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/polkit-1/actions\")
         configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/org.platter.helper.policy.in\"
                        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/polkit-1/actions/org.platter.helper.policy\" @ONLY)
-    ")
-    install(FILES packaging/linux/platter.desktop DESTINATION share/applications)
-    install(FILES assets/platter.svg DESTINATION share/icons/hicolor/scalable/apps)
+    " COMPONENT Runtime)
+    install(FILES packaging/linux/platter.desktop DESTINATION share/applications COMPONENT Runtime)
+    install(FILES assets/platter.svg DESTINATION share/icons/hicolor/scalable/apps COMPONENT Runtime)
 endif()
 
 # ------------------------------------------------------------------- cpack
@@ -58,6 +58,9 @@ set(CPACK_PACKAGE_NAME "platter")
 set(CPACK_PACKAGE_VENDOR "platter")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+# FetchContent dependencies may define their own headers/libraries install rules.
+# Ship only the application component, keeping one portable archive per platform.
+set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 if(WIN32)
     set(CPACK_GENERATOR "ZIP")

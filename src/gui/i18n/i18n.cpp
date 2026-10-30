@@ -43,11 +43,13 @@ bool install(const QString& code) {
     for (const auto& l : available_languages()) found = found || l.code == code;
     if (!found) return false;
 
-    // Qt's own strings (file dialog, standard buttons) when the system ships them.
+    // Prefer the portable package's Qt strings, including windeployqt's merged catalogue.
     {
         auto qt = std::make_unique<QTranslator>();
-        if (qt->load(QStringLiteral("qtbase_") + code, QLibraryInfo::path(QLibraryInfo::TranslationsPath)) ||
-            qt->load(QStringLiteral("qtbase_") + code, QCoreApplication::applicationDirPath() + QStringLiteral("/translations"))) {
+        const auto deployed = QCoreApplication::applicationDirPath() + QStringLiteral("/translations");
+        if (qt->load(QStringLiteral("qtbase_") + code, deployed) ||
+            qt->load(QStringLiteral("qt_") + code, deployed) ||
+            qt->load(QStringLiteral("qtbase_") + code, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
             QCoreApplication::installTranslator(qt.get());
             g_translators.push_back(std::move(qt));
         }

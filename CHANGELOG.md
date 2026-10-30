@@ -10,6 +10,7 @@ platter follows semantic versioning from 1.0. Before 1.0 each milestone was a mi
 - Exclude dependency development headers and libraries from release archives.
 - Add a disk-and-head application logo, Windows executable icons and version information, and a Linux desktop icon.
 - Show the author's copyright notice in English and Russian in About and License Information.
+- Load Qt's bundled Russian catalogue so standard dialogs and buttons translate on clean Windows installations.
 - Fix an invalid XML comment in the installed Linux polkit policy.
 - Include the GUI completion-signal connection fix made after the 1.1.2 release preparation.
 

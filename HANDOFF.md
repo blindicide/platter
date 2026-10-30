@@ -15,6 +15,8 @@ packages it, excluding FetchContent dependencies' development headers/libraries.
 install, use `cmake --install build --component Runtime --prefix <staging-directory>`.
 The disk-and-head logo is in `assets/` (editable SVG, embedded PNG, Windows ICO). Windows executables
 also have version resources. About and License Information show the author's localized copyright notice.
+Qt translations prefer the deployed directory and accept both `qtbase_ru.qm` and windeployqt's merged
+`qt_ru.qm`, so the portable package does not depend on a system Qt installation for standard UI strings.
 This release also includes the GUI completion-signal connection fix committed after 1.1.2 preparation.
 Hardware validation status is unchanged; see the release checklist and the 1.1.2 notes below.
 

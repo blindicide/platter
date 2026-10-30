@@ -179,6 +179,7 @@ jobs:
               *) echo "Unexpected package entry: $item"; exit 1 ;;
             esac
           done
+          test -s dist/platter/app/translations/qt_ru.qm
           mkdir -p "package smoke"
           cp blank.img "package smoke/sample disk.img"
           (
